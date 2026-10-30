@@ -657,6 +657,8 @@ function paintNavGraph(){
       const t=((navView.t||0)/26)%1;
       const q={x:(1-t)*(1-t)*a.x+2*(1-t)*t*mx+t*t*b.x, y:(1-t)*(1-t)*a.y+2*(1-t)*t*my+t*t*b.y};
       ctx.beginPath(); ctx.arc(q.x,q.y,3,0,Math.PI*2); ctx.fillStyle="#ffd9cf"; ctx.fill();
+    } else if(e.kind==="plan"){
+      ctx.strokeStyle="rgba(127,209,255,.75)"; ctx.lineWidth=1.5; ctx.setLineDash([2,5]); ctx.stroke(); ctx.setLineDash([]);
     } else {
       ctx.strokeStyle="rgba(60,80,100,.5)"; ctx.lineWidth=1; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
     }
@@ -685,6 +687,26 @@ function paintNavGraph(){
     ctx.fillStyle="#dfe8f0"; ctx.fillText(label,n.x-tw/2,n.y+r+16);
   }
 }
+// expand a node's breeding branches on the graph
+function expandNode(id){
+  const seenNodes=new Set(navView.nodes.map(n=>n.id));
+  const seenEdges=new Set(navView.edges.map(e=>e.a+">"+e.b));
+  const ownedSet=new Set(navPick.size?navPick:state.owned);
+  const pairs=(state.breed[id]||[]).filter(p=>!(p[0]===id&&p[1]===id)).slice(0,4);
+  let added=0;
+  for(const [a,b] of pairs){
+    for(const p of [a,b]){
+      if(!seenNodes.has(p)){
+        seenNodes.add(p); added++;
+        navView.nodes.push({id:p,type:ownedSet.has(p)?"owned":"candidate",x:navView.w/2+(Math.random()-0.5)*180,y:navView.h/2+(Math.random()-0.5)*140});
+      }
+      const key=id+">"+p;
+      if(!seenEdges.has(key)){ seenEdges.add(key); navView.edges.push({a:id,b:p,kind:"plan"}); }
+    }
+  }
+  if(added){ layoutNav(); paintNavGraph(); }
+  return added;
+}
 // node popup: plans for a clicked pal
 function openNodePop(id){
   const pop=$("nodePop"), body=$("npBody");
@@ -694,8 +716,7 @@ function openNodePop(id){
   body.innerHTML = pairs.map((p,i)=>`<div class="np-plan" data-i="${i}"><img src="${(state.icons&&state.icons[p[0]])||""}"><span class="nm">${nameOf(p[0])}</span><span class="dex">×</span><img src="${(state.icons&&state.icons[p[1]])||""}"><span class="nm">${nameOf(p[1])}</span></div>`).join("") || '<span class="hint">没有配种记录</span>';
   body.querySelectorAll(".np-plan").forEach(el=>el.onclick=()=>{
     const [a,b]=pairs[+el.dataset.i];
-    if(inPath) applyPlan(id,a,b);
-    else { $("navTarget").value=nameOf(id); pop.hidden=true; $("navGo").click(); }
+    expandNode(id);
   });
   const act=document.createElement("div"); act.className="np-actions";
   const b1=document.createElement("button"); b1.textContent="以它为目标导航";
@@ -740,7 +761,7 @@ function applyPlan(nodeId,a,b){
     const p=toCanvas(e); navView.drag.x=p.x; navView.drag.y=p.y; paintNavGraph();
   });
   window.addEventListener("mouseup",()=>{
-    if(!moved && downNode) openNodePop(downNode.id);
+    if(!moved && downNode){ openNodePop(downNode.id); expandNode(downNode.id); }
     navView.drag=null; downAt=null; downNode=null; cv.style.cursor="grab";
   });
   $("npClose").onclick=()=>{ $("nodePop").hidden=true; };
