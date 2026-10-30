@@ -6,7 +6,7 @@ const state = {
   session: null, backend: "",
   labels: null, zh: null, icons: null,
   breed: null, pairIndex: null,
-  owned: new Set(), ownedConf: new Map(),
+  owned: new Set(), ownedConf: new Map(), manualAdd: new Set(), manualRemove: new Set(),
   target: null, mode: "rev", backendMode: "gpu", meta: null,
   expanded: new Map(),
   grid: { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 },
@@ -50,6 +50,8 @@ async function init() {
     const params = new URLSearchParams(location.search);
     const demos = params.getAll("demo");
     for (const d of demos) await addImage(d, d);
+    const man = params.get("manual");
+    if (man) { for (const t of man.split(",")) { const id = resolveId(t); if (id) { state.manualAdd.add(id); state.manualRemove.delete(id); } } mergeOwned(); renderOwned(); }
     const tq = params.get("target");
     if (tq) { const tid = resolveId(tq); if (tid) { setTarget(tid); openTarget(); } }
     for (const open of params.getAll("open")) {
@@ -141,8 +143,14 @@ async function addImage(src, name) {
 function mergeOwned() {
   state.owned = new Set(); state.ownedConf = new Map();
   for (const s of state.shots) for (const id of s.owned) {
+    if (state.manualRemove.has(id)) continue;
     state.owned.add(id);
     state.ownedConf.set(id, Math.max(state.ownedConf.get(id) || 0, s.conf.get(id) || 0));
+  }
+  for (const id of state.manualAdd) {
+    if (state.manualRemove.has(id)) continue;
+    state.owned.add(id);
+    state.ownedConf.set(id, 1);
   }
 }
 function renderShots() {
@@ -256,8 +264,15 @@ function renderOwned() {
   $("ownCount").textContent = arr.length ? `${arr.length} 种` : "";
   $("chips").innerHTML = arr.map(id => {
     const ic = state.icons && state.icons[id] ? `<img src="${state.icons[id]}">` : "";
-    return `<span class="chip">${ic}${nameOf(id)}</span>`;
+    return `<span class="chip">${ic}${nameOf(id)}<button class="chip-x" data-id="${id}" title="移除">×</button></span>`;
   }).join("");
+  $("chips").querySelectorAll(".chip-x").forEach(b => b.onclick = () => {
+    const id = b.dataset.id;
+    if (state.manualAdd.has(id)) state.manualAdd.delete(id);
+    else state.manualRemove.add(id);
+    mergeOwned(); renderShots(); renderOwned();
+    if (state.target) openTarget();
+  });
   const rec = new Map();
   const own = arr.slice().sort();
   for (let i = 0; i < own.length; i++) for (let j = i; j < own.length; j++) {
@@ -385,6 +400,17 @@ $("backendToggle").onclick = async () => {
   $("status").textContent = `推理后端：${state.backend}`;
   b.classList.remove("busy");
 };
+
+$("ownAdd").onclick = () => {
+  const id = resolveId($("ownInput").value);
+  if (!id) { $("status").textContent = "没找到这只帕鲁，试试中文名/拼音/编号"; return; }
+  state.manualAdd.add(id); state.manualRemove.delete(id);
+  $("ownInput").value = "";
+  mergeOwned(); renderShots(); renderOwned();
+  if (state.target) openTarget();
+  $("status").textContent = `已手动加入 ${nameOf(id)}（当前共 ${state.owned.size} 种）`;
+};
+$("ownInput").addEventListener("keydown", e => { if (e.key === "Enter") $("ownAdd").click(); });
 
 // ---------------- events ----------------
 async function addFiles(files) {

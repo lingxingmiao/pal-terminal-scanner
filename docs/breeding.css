@@ -95,3 +95,8 @@
 .explorer::-webkit-scrollbar-thumb{background:#33414f;border-radius:6px;border:2px solid #0f1216}
 .explorer::-webkit-scrollbar-thumb:hover{background:#455a6d}
 .plan-block{flex-wrap:nowrap}
+.own-add{display:flex;gap:6px;margin-top:8px}
+.own-add input{flex:1;background:#0f1216;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:12px}
+.own-add button{font-size:12px;padding:5px 10px}
+.chip .chip-x{margin-left:4px;background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px}
+.chip .chip-x:hover{color:#ff8a7a}
