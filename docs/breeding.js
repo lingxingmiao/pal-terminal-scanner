@@ -62,6 +62,7 @@ async function init() {
       switchMode("nav");
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
       if(params.get("navTarget")) $("navGo").click();
+      if(params.get("pop")){ const pid=resolveId(params.get("pop")); if(pid) setTimeout(()=>openNodePop(pid),400); }
     }
     const tq = params.get("target");
     if (tq) { const tid = resolveId(tq); if (tid) { setTarget(tid); openTarget(); } }
@@ -651,13 +652,65 @@ function paintNavGraph(){
     ctx.fillStyle="#dfe8f0"; ctx.fillText(label,n.x-tw/2,n.y+r+16);
   }
 }
-// drag
+// node popup: plans for a clicked pal
+function openNodePop(id){
+  const pop=$("nodePop"), body=$("npBody");
+  $("npTitle").textContent=`${nameOf(id)} (No.${dexNum(id)})`;
+  const pairs=(state.breed[id]||[]).filter(p=>!(p[0]===id&&p[1]===id)).slice(0,10);
+  const inPath = !!(navView.lastResult && navView.lastResult.path.some(s=>s.child===id));
+  body.innerHTML = pairs.map((p,i)=>`<div class="np-plan" data-i="${i}"><img src="${(state.icons&&state.icons[p[0]])||""}"><span class="nm">${nameOf(p[0])}</span><span class="dex">×</span><img src="${(state.icons&&state.icons[p[1]])||""}"><span class="nm">${nameOf(p[1])}</span></div>`).join("") || '<span class="hint">没有配种记录</span>';
+  body.querySelectorAll(".np-plan").forEach(el=>el.onclick=()=>{
+    const [a,b]=pairs[+el.dataset.i];
+    if(inPath) applyPlan(id,a,b);
+    else { $("navTarget").value=nameOf(id); pop.hidden=true; $("navGo").click(); }
+  });
+  const act=document.createElement("div"); act.className="np-actions";
+  const b1=document.createElement("button"); b1.textContent="以它为目标导航";
+  b1.onclick=()=>{ $("navTarget").value=nameOf(id); pop.hidden=true; $("navGo").click(); };
+  act.appendChild(b1);
+  const b2=document.createElement("button"); b2.textContent="加入输入组";
+  b2.onclick=()=>{ navPick.add(id); renderNavPick(); };
+  act.appendChild(b2);
+  body.appendChild(act);
+  pop.hidden=false;
+}
+function applyPlan(nodeId,a,b){
+  const r=navView.lastResult; if(!r) return;
+  const s=r.path.find(x=>x.child===nodeId); if(!s) return;
+  const from=s.from;
+  s.other = (a===from?b:(b===from?a:a));
+  if(s.other===from){ s.other=b===from?a:b; }
+  const picked=new Set(navPick.size?navPick:state.owned);
+  s.external=!picked.has(s.other);
+  s.p=1; s.stepCost=1;
+  let cost=0, ext=0, dex=0;
+  for(const st of r.path){ cost+=st.stepCost||1; if(st.external){ ext++; dex+=dexNum(st.other); } }
+  r.cost=cost; r.ext=ext; r.dex=dex; r.steps=r.path.length;
+  renderNav(r,r._inputs,r._target);
+  $("nodePop").hidden=true;
+}
+// drag + click
 (function(){
   const cv=$("navCanvas");
   const toCanvas=(e)=>{const r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)*(navView.w/r.width),y:(e.clientY-r.top)*(navView.h/r.height)};};
-  cv.addEventListener("mousedown",e=>{const p=toCanvas(e);let hit=null;for(const n of navView.nodes){if((n.x-p.x)**2+(n.y-p.y)**2<400){hit=n;break;}}navView.drag=hit;cv.style.cursor=hit?"grabbing":"grab";});
-  window.addEventListener("mousemove",e=>{if(!navView.drag)return;const p=toCanvas(e);navView.drag.x=p.x;navView.drag.y=p.y;paintNavGraph();});
-  window.addEventListener("mouseup",()=>{navView.drag=null;cv.style.cursor="grab";});
+  let downAt=null, downNode=null, moved=false;
+  cv.addEventListener("mousedown",e=>{
+    const p=toCanvas(e);
+    let hit=null;
+    for(const n of navView.nodes){ if((n.x-p.x)**2+(n.y-p.y)**2<420){ hit=n; break; } }
+    navView.drag=hit; downAt={x:e.clientX,y:e.clientY}; downNode=hit; moved=false;
+    cv.style.cursor=hit?"grabbing":"grab";
+  });
+  window.addEventListener("mousemove",e=>{
+    if(downAt && (Math.abs(e.clientX-downAt.x)>4 || Math.abs(e.clientY-downAt.y)>4)) moved=true;
+    if(!navView.drag) return;
+    const p=toCanvas(e); navView.drag.x=p.x; navView.drag.y=p.y; paintNavGraph();
+  });
+  window.addEventListener("mouseup",()=>{
+    if(!moved && downNode) openNodePop(downNode.id);
+    navView.drag=null; downAt=null; downNode=null; cv.style.cursor="grab";
+  });
+  $("npClose").onclick=()=>{ $("nodePop").hidden=true; };
 })();
 
 // ---------------- nav groups ----------------

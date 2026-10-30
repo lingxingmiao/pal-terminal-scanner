@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>给你配了 - 幻兽帕鲁自动配种工具</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="breeding.css?v=20261031d">
+<link rel="stylesheet" href="breeding.css?v=20261031e">
 </head>
 <body>
 <header>
@@ -85,7 +85,13 @@
       <div id="navSummary" class="nav-summary"></div>
       <div class="nav-flex">
         <div id="navTable" class="nav-table"></div>
-        <canvas id="navCanvas" width="900" height="520"></canvas>
+        <div class="nav-canvas-wrap">
+          <canvas id="navCanvas" width="900" height="520"></canvas>
+          <div id="nodePop" class="node-pop" hidden>
+            <div class="np-head"><span id="npTitle"></span><button id="npClose" class="np-close">×</button></div>
+            <div id="npBody" class="np-body"></div>
+          </div>
+        </div>
       </div>
     </div>
     <div id="fwdPanel" hidden>
@@ -109,6 +115,6 @@
 </footer>
 
 <script src="vendor/ort.min.js"></script>
-<script src="breeding.js?v=20261031d"></script>
+<script src="breeding.js?v=20261031e"></script>
 </body>
 </html>

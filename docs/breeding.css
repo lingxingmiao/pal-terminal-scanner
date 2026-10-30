@@ -138,3 +138,17 @@
 .modal-box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;width:300px}
 .modal-box h3{margin:0 0 10px;font-size:14px}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+
+.nav-canvas-wrap{position:relative}
+.node-pop{position:absolute;top:10px;right:10px;width:290px;max-height:calc(100% - 20px);overflow:auto;background:rgba(15,18,22,.96);border:1px solid var(--line);border-radius:10px;padding:10px;z-index:20;backdrop-filter:blur(3px)}
+.np-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.np-head span{font-size:13px;font-weight:500}
+.np-close{margin-left:auto;background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:14px}
+.np-body{display:flex;flex-direction:column;gap:6px}
+.np-plan{display:flex;align-items:center;gap:6px;padding:5px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:#12161b}
+.np-plan:hover{border-color:#3a4a5a}
+.np-plan img{width:22px;height:22px;border-radius:50%;object-fit:contain}
+.np-plan .nm{font-size:11px;color:#dfe8f0}
+.np-plan .dex{font-size:10px;color:var(--muted)}
+.np-actions{display:flex;gap:6px;margin-top:6px}
+.np-actions button{font-size:11px;padding:4px 8px}
