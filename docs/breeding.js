@@ -63,6 +63,16 @@ async function init() {
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
       if(params.get("navTarget")) $("navGo").click();
       if(params.get("pop")){ const pid=resolveId(params.get("pop")); if(pid) setTimeout(()=>openNodePop(pid),400); }
+      if(params.get("testclick")){
+        setTimeout(()=>{
+          const cv=$("navCanvas"); const n=navView.nodes.find(x=>x.type==="target")||navView.nodes[0];
+          if(!cv||!n) return;
+          const r=cv.getBoundingClientRect();
+          const px=r.left+n.x*(r.width/navView.w), py=r.top+n.y*(r.height/navView.h);
+          cv.dispatchEvent(new MouseEvent("mousedown",{clientX:px,clientY:py,bubbles:true}));
+          window.dispatchEvent(new MouseEvent("mouseup",{clientX:px,clientY:py,bubbles:true}));
+        },1500);
+      }
     }
     const tq = params.get("target");
     if (tq) { const tid = resolveId(tq); if (tid) { setTarget(tid); openTarget(); } }
