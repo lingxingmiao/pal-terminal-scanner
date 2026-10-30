@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>给你配了 - 幻兽帕鲁自动配种工具</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="breeding.css?v=20261031b">
+<link rel="stylesheet" href="breeding.css?v=20261031c">
 </head>
 <body>
 <header>
@@ -17,7 +17,7 @@
 
 <main class="breed-main">
   <section class="panel">
-    <h2 class="own-head">你已有的帕鲁 <span class="muted" id="ownCount"></span><button id="backendToggle" class="mini" title="切换 CPU / GPU 推理">推理：GPU</button></h2>
+    <h2 class="own-head">你已有的帕鲁 <span class="muted" id="ownCount"></span><button id="backendToggle" class="mini" title="切换 CPU / GPU 推理">推理：GPU</button><button id="clearOwned" class="mini" title="清空所有已有帕鲁">清空</button></h2>
     <div id="drop" class="drop">
       <p>把终端截图拖进来，或 <b>Ctrl+V</b> 粘贴，或</p>
       <label class="file">选择截图（可多选）<input type="file" id="file" accept="image/*" multiple></label>
@@ -63,6 +63,15 @@
         <input id="navTarget" list="pallist" placeholder="目标帕鲁（中文/拼音/No）">
         <button id="navGo">导航</button>
       </div>
+      <div class="nav-group">
+        <div class="nav-group-row">
+          <select id="navGroupSel"><option value="__all">全部已有（默认）</option></select>
+          <button id="navGroupSave" class="mini">保存当前勾选为分组</button>
+          <button id="navPickAll" class="mini">全选</button>
+          <button id="navPickNone" class="mini">全不选</button>
+        </div>
+        <div id="navPick" class="nav-pick"></div>
+      </div>
       <p class="hint">外部候选按 No 优先（B 变体加 总帕鲁数/2）；每配一次算 1 个蛋糕，按步数找最省路线。</p>
       <div id="navSummary" class="nav-summary"></div>
       <div class="nav-flex">
@@ -91,6 +100,6 @@
 </footer>
 
 <script src="vendor/ort.min.js"></script>
-<script src="breeding.js?v=20261031b"></script>
+<script src="breeding.js?v=20261031c"></script>
 </body>
 </html>

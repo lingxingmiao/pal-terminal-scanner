@@ -46,6 +46,8 @@ async function init() {
     }).join("");
     setTarget(state.breed["SheepBall"] ? "SheepBall" : Object.keys(breed)[0]);
     state.icons = await fetch("icons.json").then(r => r.json());
+    renderGroupSel();
+    renderNavPick();
     openTarget();
     const params = new URLSearchParams(location.search);
     const demos = params.getAll("demo");
@@ -328,6 +330,7 @@ function renderOwned() {
   $("recs").innerHTML = top.length ? `<h3>你现有的帕鲁可以直接配出：</h3><div class="rec-row">` +
     top.map(([id]) => `<button class="rec" data-id="${id}">${nameOf(id)}</button>`).join("") + `</div>` : "";
   $("recs").querySelectorAll(".rec").forEach(b => b.onclick = () => { setTarget(b.dataset.id); openTarget(); });
+  renderNavPick();
 }
 
 // ---------------- plans / explorer ----------------
@@ -460,6 +463,9 @@ $("ownInput").addEventListener("keydown", e => { if (e.key === "Enter") $("ownAd
 
 // ---------------- navigation ----------------
 const NAV_PASSIVES = {"传说":"Legend","运动健将":"MoveSpeed_up_2","灵活":"MoveSpeed_up_1","永动机":"Stamina_Up_3"};
+const navPick = new Set();
+let navGroups = [];
+try { navGroups = JSON.parse(localStorage.getItem("pal_nav_groups") || "[]"); } catch (e) { navGroups = []; }
 function resolveIdPassive(t){ const low=(t||"").toLowerCase(); for(const k in NAV_PASSIVES) if(k===t||NAV_PASSIVES[k].toLowerCase()===low) return NAV_PASSIVES[k]; return null; }
 function dexNum(id){const m=state.meta&&state.meta[id]&&state.meta[id].dex;const g=m&&m.match(/^(\d+)([a-z])?/i);if(!g)return 9999;const base=+g[1];const total=Object.keys(state.meta||{}).length;return (g[2]||"").toLowerCase()==="b"?base+total/2:base;}
 function navEdges(){
@@ -654,6 +660,49 @@ function paintNavGraph(){
   window.addEventListener("mouseup",()=>{navView.drag=null;cv.style.cursor="grab";});
 })();
 
+// ---------------- nav groups ----------------
+function renderGroupSel(){
+  const sel=$("navGroupSel"); if(!sel) return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="__all">全部已有（默认）</option>'+navGroups.map((g,i)=>`<option value="${i}">${g.name}（${g.ids.length}）</option>`).join("");
+  if(cur&&[...sel.options].some(o=>o.value===cur)) sel.value=cur;
+}
+function renderNavPick(){
+  const el=$("navPick"); if(!el) return;
+  const ids=[...state.owned].sort((a,b)=>dexNum(a)-dexNum(b));
+  el.innerHTML=ids.length?ids.map(id=>`<label class="pick${navPick.has(id)?" on":""}"><input type="checkbox" data-id="${id}" ${navPick.has(id)?"checked":""}><img src="${(state.icons&&state.icons[id])||""}"><span>${nameOf(id)}</span></label>`).join(""):'<span class="hint">还没有已有帕鲁</span>';
+  el.querySelectorAll("input").forEach(cb=>cb.onchange=()=>{
+    const id=cb.dataset.id;
+    if(cb.checked) navPick.add(id); else navPick.delete(id);
+    renderNavPick();
+  });
+  if($("navGroupSel")&&!$("navGroupSel").options.length) renderGroupSel();
+}
+$("navGroupSel").onchange=()=>{
+  const v=$("navGroupSel").value;
+  if(v==="__all") navPick.clear();
+  else navPick=new Set(navGroups[+v]?navGroups[+v].ids:[]);
+  renderNavPick();
+};
+$("navGroupSave").onclick=()=>{
+  if(!navPick.size){ $("status").textContent="分组：先勾选帕鲁再保存"; return; }
+  const name=prompt("分组名称", "分组 "+(navGroups.length+1));
+  if(!name) return;
+  navGroups.push({name, ids:[...navPick]});
+  localStorage.setItem("pal_nav_groups", JSON.stringify(navGroups));
+  renderGroupSel();
+  $("status").textContent=`已保存分组「${name}」（${navPick.size} 只）`;
+};
+$("navPickAll").onclick=()=>{ for(const id of state.owned) navPick.add(id); renderNavPick(); };
+$("navPickNone").onclick=()=>{ navPick.clear(); renderNavPick(); };
+$("clearOwned").onclick=()=>{
+  if(!confirm("清空所有已有帕鲁（截图识别 + 手动添加）？")) return;
+  state.shots=[]; state.manualAdd.clear(); state.manualRemove.clear();
+  state.owned=new Set(); state.ownedConf=new Map(); navPick.clear();
+  renderShots(); renderOwned(); openTarget();
+  $("status").textContent="已清空已有帕鲁";
+};
+
 // ---------------- events ----------------
 async function addFiles(files) {
   for (const f of files) {
@@ -672,7 +721,7 @@ drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add(
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
 $("navGo").onclick = () => {
-  const inputs=[...state.owned];
+  const inputs = navPick.size ? [...navPick] : [...state.owned];
   const target=resolveId($("navTarget").value);
   if(!inputs.length){$("status").textContent="导航：先在左侧截图识别或手动添加帕鲁";return;}
   if(!target){$("status").textContent="导航：目标没识别出来";return;}
