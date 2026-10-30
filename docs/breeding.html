@@ -59,12 +59,11 @@
     <div id="navPanel" hidden>
       <h2>导航：输入帕鲁 → 目标</h2>
       <div class="controls">
-        <input id="navInputs" placeholder="输入帕鲁（逗号分隔，中文/拼音/No）">
-        <input id="navPassive" placeholder="要遗传的词条（可空，如 传说）">
+        <span id="navOwnedInfo" class="hint">输入 = 左侧「你已有的帕鲁」</span>
         <input id="navTarget" placeholder="目标帕鲁（中文/拼音/No）">
-        <button id="navGo">导航并算成本</button>
+        <button id="navGo">导航</button>
       </div>
-      <p class="hint">每步单方继承 50%、双方 75%；配一次 1 个蛋糕，按期望蛋糕数找最省路线；外部候选按 No 优先（B 变体加 总帕鲁数/2）。</p>
+      <p class="hint">外部候选按 No 优先（B 变体加 总帕鲁数/2）；每配一次算 1 个蛋糕，按步数找最省路线。</p>
       <div id="navSummary" class="nav-summary"></div>
       <div class="nav-flex">
         <div id="navTable" class="nav-table"></div>

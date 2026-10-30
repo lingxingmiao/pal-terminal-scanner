@@ -52,12 +52,14 @@ async function init() {
     for (const d of demos) await addImage(d, d);
     const man = params.get("manual");
     if (man) { for (const t of man.split(",")) { const id = resolveId(t); if (id) { state.manualAdd.add(id); state.manualRemove.delete(id); } } mergeOwned(); renderOwned(); }
+    if(params.get("owned")){
+      for(const t of params.get("owned").split(",")){ const id=resolveId(t); if(id){ state.manualAdd.add(id); state.manualRemove.delete(id); } }
+      mergeOwned(); renderOwned();
+    }
     if(params.get("mode")==="nav"){
       switchMode("nav");
-      if(params.get("navInputs")) $("navInputs").value=params.get("navInputs");
-      if(params.get("navPassive")) $("navPassive").value=params.get("navPassive");
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
-      if(params.get("navInputs")) $("navGo").click();
+      if(params.get("navTarget")) $("navGo").click();
     }
     const tq = params.get("target");
     if (tq) { const tid = resolveId(tq); if (tid) { setTarget(tid); openTarget(); } }
@@ -502,17 +504,16 @@ class Heap{
 }
 
 function renderNav(result,inputs,target){
-  if(!result){$("navSummary").textContent="没有找到可行路线（词条可能无法传到目标，或输入帕鲁不带该词条）。";$("navTable").innerHTML="";return;}
-  const pct=(result.prob*100).toFixed(1);
-  $("navSummary").textContent=`总步数 ${result.steps} · 成功率 ${pct}% · 期望蛋糕 ${result.cost.toFixed(2)} · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
+  if(!result){$("navSummary").textContent="没有找到可行路线（深度不够或图不连通）。";$("navTable").innerHTML="";return;}
+  $("navSummary").textContent=`总步数 ${result.steps} · 期望蛋糕 ${result.cost.toFixed(2)}（每步 1 个） · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
   const rows=result.path.map((p,i)=>{
     const ext=p.external?`<span class="tag ext">外部 No.${dexNum(p.other)}</span>`:`<span class="tag in">输入</span>`;
     return `<tr><td>${i+1}</td><td>${nameOf(p.from)}<br><span class="mono">${p.from}</span></td>
       <td>${nameOf(p.other)}<br><span class="mono">${p.other}</span> ${ext}</td>
       <td>${nameOf(p.child)}<br><span class="mono">${p.child}</span></td>
-      <td>${(p.p*100).toFixed(0)}%</td><td>${p.stepCost?p.stepCost.toFixed(2):"—"}</td></tr>`;
+      <td>${p.stepCost?p.stepCost.toFixed(2):"—"}</td></tr>`;
   }).join("");
-  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>当前</th><th>另一亲本</th><th>子代</th><th>概率</th><th>蛋糕</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>当前</th><th>另一亲本</th><th>子代</th><th>蛋糕</th></tr></thead><tbody>${rows}</tbody></table>`;
   drawNavGraph(result,inputs,target);
 }
 
@@ -619,15 +620,12 @@ drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add(
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
 $("navGo").onclick = () => {
-  const raw=$("navInputs").value.split(/[,，、\n]+/).map(s=>s.trim()).filter(Boolean);
-  const inputs=raw.map(resolveId).filter(Boolean);
+  const inputs=[...state.owned];
   const target=resolveId($("navTarget").value);
-  const pt=$("navPassive").value.trim();
-  const pid=pt?(NAV_PASSIVES[pt]||resolveIdPassive(pt)):null;
-  if(!inputs.length||!target){$("status").textContent="导航：输入或目标没识别出来";return;}
-  if(pt&&!pid){$("status").textContent="导航：词条没识别出来";return;}
-  $("status").textContent=`导航：${inputs.map(nameOf).join(" / ")} → ${nameOf(target)}`;
-  const r=navSearch(inputs,target,pid);
+  if(!inputs.length){$("status").textContent="导航：先在左侧截图识别或手动添加帕鲁";return;}
+  if(!target){$("status").textContent="导航：目标没识别出来";return;}
+  $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}`;
+  const r=navSearch(inputs,target,null);
   if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
   renderNav(r,inputs,target);
 };
