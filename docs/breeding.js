@@ -7,7 +7,7 @@ const state = {
   labels: null, zh: null, icons: null,
   breed: null, pairIndex: null,
   owned: new Set(), ownedConf: new Map(),
-  target: null, mode: "rev", backendMode: "gpu",
+  target: null, mode: "rev", backendMode: "gpu", meta: null,
   expanded: new Map(),
   grid: { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 },
 };
@@ -27,25 +27,31 @@ async function init() {
     }
     updateBackendBtn();
     $("status").textContent = `模型就绪（${state.backend}），等待截图…`;
-    const [labels, zh, breed] = await Promise.all([
+    const [labels, zh, breed, meta] = await Promise.all([
       fetch("models/labels.json").then(r => r.json()),
       fetch("models/zh_names.json").then(r => r.json()),
       fetch("breeding.json").then(r => r.json()),
+      fetch("meta.json").then(r => r.json()),
     ]);
-    state.labels = labels.labels; state.zh = zh; state.breed = breed;
+    state.labels = labels.labels; state.zh = zh; state.breed = breed; state.meta = meta;
     state.pairIndex = new Map();
     for (const [child, pairs] of Object.entries(breed)) for (const [a, b] of pairs) {
       const k = a < b ? `${a}|${b}` : `${b}|${a}`;
       if (!state.pairIndex.has(k)) state.pairIndex.set(k, []);
       state.pairIndex.get(k).push(child);
     }
-    $("pallist").innerHTML = Object.keys(breed).map(id => `<option value="${nameOf(id)}">${id}</option>`).join("");
+    $("pallist").innerHTML = Object.keys(breed).map(id => {
+      const dex = meta[id] ? meta[id].dex : "";
+      return `<option value="${nameOf(id)}" label="${dex ? dex + " " : ""}${nameOf(id)}">${id}</option>`;
+    }).join("");
     setTarget(state.breed["SheepBall"] ? "SheepBall" : Object.keys(breed)[0]);
     state.icons = await fetch("icons.json").then(r => r.json());
     openTarget();
     const params = new URLSearchParams(location.search);
     const demos = params.getAll("demo");
     for (const d of demos) await addImage(d, d);
+    const tq = params.get("target");
+    if (tq) { const tid = resolveId(tq); if (tid) { setTarget(tid); openTarget(); } }
     const open = params.get("open");
     if (open) { const id = resolveId(open); if (id) { state.expanded.set(id, { page: 0 }); renderExplorer(); } }
   } catch (e) { $("status").textContent = "初始化失败：" + e.message; }
@@ -54,8 +60,29 @@ async function init() {
 function resolveId(text) {
   text = (text || "").trim(); if (!text) return null;
   if (state.breed[text]) return text;
-  for (const id of Object.keys(state.breed)) if (nameOf(id) === text) return id;
   const low = text.toLowerCase();
+  // 1) 图鉴编号：1 / 001 / 5B / No.001
+  if (state.meta) {
+    const m = low.match(/^(?:no\.?\s*)?(\d{1,3})([a-z])?$/i);
+    if (m) {
+      const num = +m[1], suf = (m[2] || "").toLowerCase();
+      let hit = null;
+      for (const id of Object.keys(state.meta)) {
+        const dm = state.meta[id].dex.toLowerCase().match(/^(\d+)([a-z]?)$/);
+        if (!dm || +dm[1] !== num) continue;
+        if (suf) { if (dm[2] === suf) { hit = id; break; } }
+        else if (!hit || !dm[2]) hit = id;
+      }
+      if (hit) return hit;
+    }
+    // 2) 拼音全拼 / 首字母
+    for (const id of Object.keys(state.meta)) {
+      const mt = state.meta[id];
+      if (mt.py === low || mt.pyi === low) return id;
+    }
+  }
+  // 3) 中文名 / 内部 ID
+  for (const id of Object.keys(state.breed)) if (nameOf(id) === text) return id;
   for (const id of Object.keys(state.breed)) if (id.toLowerCase() === low) return id;
   for (const id of Object.keys(state.breed)) if (nameOf(id).includes(text)) return id;
   return null;
