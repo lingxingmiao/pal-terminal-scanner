@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>给你配了 - 幻兽帕鲁自动配种工具</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="breeding.css?v=20261031c">
+<link rel="stylesheet" href="breeding.css?v=20261031d">
 </head>
 <body>
 <header>
@@ -64,13 +64,22 @@
         <button id="navGo">导航</button>
       </div>
       <div class="nav-group">
-        <div class="nav-group-row">
-          <select id="navGroupSel"><option value="__all">全部已有（默认）</option></select>
-          <button id="navGroupSave" class="mini">保存当前勾选为分组</button>
+        <div class="group-head">
+          <span class="group-title">输入分组</span>
+          <button id="navGroupNew" class="mini">+ 新建分组</button>
+          <button id="navGroupSave" class="mini">保存当前勾选</button>
           <button id="navPickAll" class="mini">全选</button>
           <button id="navPickNone" class="mini">全不选</button>
         </div>
+        <div id="groupCards" class="group-cards"></div>
         <div id="navPick" class="nav-pick"></div>
+      </div>
+      <div id="groupModal" class="modal" hidden>
+        <div class="modal-box">
+          <h3 id="groupModalTitle">新建分组</h3>
+          <input id="groupModalInput" placeholder="分组名称">
+          <div class="modal-actions"><button id="groupModalCancel">取消</button><button id="groupModalOk">确定</button></div>
+        </div>
       </div>
       <p class="hint">外部候选按 No 优先（B 变体加 总帕鲁数/2）；每配一次算 1 个蛋糕，按步数找最省路线。</p>
       <div id="navSummary" class="nav-summary"></div>
@@ -100,6 +109,6 @@
 </footer>
 
 <script src="vendor/ort.min.js"></script>
-<script src="breeding.js?v=20261031c"></script>
+<script src="breeding.js?v=20261031d"></script>
 </body>
 </html>

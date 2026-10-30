@@ -46,7 +46,7 @@ async function init() {
     }).join("");
     setTarget(state.breed["SheepBall"] ? "SheepBall" : Object.keys(breed)[0]);
     state.icons = await fetch("icons.json").then(r => r.json());
-    renderGroupSel();
+    renderGroupCards();
     renderNavPick();
     openTarget();
     const params = new URLSearchParams(location.search);
@@ -661,12 +661,9 @@ function paintNavGraph(){
 })();
 
 // ---------------- nav groups ----------------
-function renderGroupSel(){
-  const sel=$("navGroupSel"); if(!sel) return;
-  const cur=sel.value;
-  sel.innerHTML='<option value="__all">全部已有（默认）</option>'+navGroups.map((g,i)=>`<option value="${i}">${g.name}（${g.ids.length}）</option>`).join("");
-  if(cur&&[...sel.options].some(o=>o.value===cur)) sel.value=cur;
-}
+let navGroupIdx = -1;
+function saveGroups(){ try{ localStorage.setItem("pal_nav_groups", JSON.stringify(navGroups)); }catch(e){} }
+function setPick(ids){ navPick.clear(); if(ids) for(const id of ids) navPick.add(id); }
 function renderNavPick(){
   const el=$("navPick"); if(!el) return;
   const ids=[...state.owned].sort((a,b)=>dexNum(a)-dexNum(b));
@@ -676,32 +673,69 @@ function renderNavPick(){
     if(cb.checked) navPick.add(id); else navPick.delete(id);
     renderNavPick();
   });
-  if($("navGroupSel")&&!$("navGroupSel").options.length) renderGroupSel();
 }
-$("navGroupSel").onchange=()=>{
-  const v=$("navGroupSel").value;
-  if(v==="__all") navPick.clear();
-  else navPick=new Set(navGroups[+v]?navGroups[+v].ids:[]);
-  renderNavPick();
-};
+function renderGroupCards(){
+  const el=$("groupCards"); if(!el) return;
+  const cards=[{name:"全部已有",ids:null}].concat(navGroups);
+  el.innerHTML=cards.map((g,i)=>{
+    const idx=i-1, active=idx===navGroupIdx;
+    const ids=g.ids||[...state.owned];
+    const n=g.ids?g.ids.length:state.owned.size;
+    const icons=ids.slice(0,5).map(id=>`<img src="${(state.icons&&state.icons[id])||""}">`).join("");
+    return `<div class="gcard${active?" active":""}" data-i="${idx}">
+      <div class="gname">${g.name}</div>
+      <div class="gicons">${icons}<span class="gcount">${n} 只</span></div>
+      ${g.ids!==null?`<button class="gdel" data-del="${idx}" title="删除分组">×</button>`:""}
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".gdel").forEach(b=>b.onclick=(e)=>{
+    e.stopPropagation();
+    const i=+b.dataset.del;
+    if(!confirm("删除分组「"+navGroups[i].name+"」？")) return;
+    navGroups.splice(i,1);
+    if(navGroupIdx===i) navGroupIdx=-1; else if(navGroupIdx>i) navGroupIdx--;
+    if(navGroupIdx<0) navPick.clear();
+    saveGroups(); renderGroupCards(); renderNavPick();
+  });
+  el.querySelectorAll(".gcard").forEach(c=>c.onclick=()=>{
+    navGroupIdx=+c.dataset.i;
+    setPick(navGroupIdx<0?null:navGroups[navGroupIdx].ids);
+    renderGroupCards(); renderNavPick();
+  });
+}
+function openGroupModal(cb){
+  $("groupModal").hidden=false;
+  $("groupModalInput").value="";
+  setTimeout(()=>$("groupModalInput").focus(),30);
+  $("groupModalOk").onclick=()=>{
+    const v=$("groupModalInput").value.trim();
+    if(!v) return;
+    $("groupModal").hidden=true;
+    cb(v);
+  };
+  $("groupModalCancel").onclick=()=>{ $("groupModal").hidden=true; };
+  $("groupModalInput").onkeydown=(e)=>{ if(e.key==="Enter") $("groupModalOk").click(); if(e.key==="Escape") $("groupModal").hidden=true; };
+}
+$("navGroupNew").onclick=()=>openGroupModal(name=>{
+  navGroups.push({name,ids:[...navPick]});
+  navGroupIdx=navGroups.length-1;
+  saveGroups(); renderGroupCards(); renderNavPick();
+});
 $("navGroupSave").onclick=()=>{
-  if(!navPick.size){ $("status").textContent="分组：先勾选帕鲁再保存"; return; }
-  const name=prompt("分组名称", "分组 "+(navGroups.length+1));
-  if(!name) return;
-  navGroups.push({name, ids:[...navPick]});
-  localStorage.setItem("pal_nav_groups", JSON.stringify(navGroups));
-  renderGroupSel();
-  $("status").textContent=`已保存分组「${name}」（${navPick.size} 只）`;
+  if(navGroupIdx>=0){
+    navGroups[navGroupIdx].ids=[...navPick];
+    saveGroups(); renderGroupCards();
+    $("status").textContent="已更新分组「"+navGroups[navGroupIdx].name+"」";
+  } else {
+    openGroupModal(name=>{
+      navGroups.push({name,ids:[...navPick]});
+      navGroupIdx=navGroups.length-1;
+      saveGroups(); renderGroupCards(); renderNavPick();
+    });
+  }
 };
-$("navPickAll").onclick=()=>{ for(const id of state.owned) navPick.add(id); renderNavPick(); };
-$("navPickNone").onclick=()=>{ navPick.clear(); renderNavPick(); };
-$("clearOwned").onclick=()=>{
-  if(!confirm("清空所有已有帕鲁（截图识别 + 手动添加）？")) return;
-  state.shots=[]; state.manualAdd.clear(); state.manualRemove.clear();
-  state.owned=new Set(); state.ownedConf=new Map(); navPick.clear();
-  renderShots(); renderOwned(); openTarget();
-  $("status").textContent="已清空已有帕鲁";
-};
+$("navPickAll").onclick=()=>{ for(const id of state.owned) navPick.add(id); renderNavPick(); if(navGroupIdx>=0){ navGroups[navGroupIdx].ids=[...navPick]; saveGroups(); renderGroupCards(); } };
+$("navPickNone").onclick=()=>{ navPick.clear(); renderNavPick(); if(navGroupIdx>=0){ navGroups[navGroupIdx].ids=[]; saveGroups(); renderGroupCards(); } };
 
 // ---------------- events ----------------
 async function addFiles(files) {

@@ -120,3 +120,21 @@
 .pick.on{color:#a9f0c5;border-color:#1f5c34;background:#12241b}
 .own-head .mini{margin-left:6px}
 .own-head .mini:first-of-type{margin-left:auto}
+
+.group-head{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.group-title{font-size:12px;color:var(--muted);margin-right:auto}
+.group-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-top:8px}
+.gcard{position:relative;background:#0f1216;border:1px solid var(--line);border-radius:10px;padding:8px;cursor:pointer;min-height:64px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s,background .15s}
+.gcard:hover{border-color:#3a4a5a}
+.gcard.active{border-color:#38d47a;background:#12241b;box-shadow:0 0 0 1px #1f5c34 inset}
+.gname{font-size:12px;color:#dfe8f0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gicons{display:flex;align-items:center;gap:3px;flex-wrap:wrap}
+.gicons img{width:18px;height:18px;border-radius:50%;object-fit:contain;background:#171c22}
+.gcount{font-size:10px;color:var(--muted);margin-left:2px}
+.gdel{position:absolute;top:4px;right:4px;background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:12px;padding:0 3px}
+.gdel:hover{color:#ff8a7a}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal[hidden]{display:none !important}
+.modal-box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;width:300px}
+.modal-box h3{margin:0 0 10px;font-size:14px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
