@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>配种导航原型 · No 优先</title>
+<title>配种导航 · 词条成本</title>
 <style>
 :root{--bg:#0f1216;--panel:#171c22;--line:#2a323c;--fg:#e6edf3;--muted:#8b98a5;--acc:#38d47a}
 *{box-sizing:border-box}
@@ -10,12 +10,12 @@ body{margin:0;font:14px/1.6 "Segoe UI","Microsoft YaHei",sans-serif;background:v
 header{padding:14px 18px;border-bottom:1px solid var(--line)}
 h1{margin:0;font-size:18px}
 .sub{color:var(--muted);font-size:12px;margin:4px 0 0}
-main{display:grid;grid-template-columns:360px 1fr;gap:14px;padding:14px}
+main{display:grid;grid-template-columns:380px 1fr;gap:14px;padding:14px}
 @media(max-width:900px){main{grid-template-columns:1fr}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
 label{font-size:12px;color:var(--muted);display:block;margin:8px 0 4px}
 input,textarea{width:100%;background:#0f1216;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit}
-textarea{min-height:70px;resize:vertical}
+textarea{min-height:64px;resize:vertical}
 button{background:#22303c;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;margin-top:10px}
 button:hover{background:#2c3d4c}
 .status{font-size:12px;color:var(--muted);margin-top:8px;min-height:18px}
@@ -26,25 +26,25 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 .tag.ext{color:#ffb86b;border-color:#5c4a1f;background:#241f12}
 .tag.in{color:#38d47a;border-color:#1f5c34;background:#12241b}
 .mono{font-family:Consolas,monospace;font-size:11px;color:var(--muted)}
-.cands{margin-top:10px}
-.cands h3{font-size:12px;color:var(--muted);margin:10px 0 6px;font-weight:500}
-.cand{display:flex;gap:8px;align-items:center;font-size:12px;padding:3px 0;color:#c9d4de}
-.cand .no{color:var(--muted);min-width:44px}
 .summary{background:#12241b;border:1px solid #1f5c34;border-radius:8px;padding:8px 10px;font-size:12px;margin:10px 0;color:#a9f0c5}
+.hint{font-size:11px;color:var(--muted);margin:4px 0 0}
 </style>
 </head>
 <body>
 <header>
-  <h1>配种导航原型 <span style="color:var(--muted)">· 输入帕鲁 → 输出帕鲁</span></h1>
-  <p class="sub">外部候选按图鉴 No 优先；A* 主键步数，其次外部帕鲁数量、No 总和。</p>
+  <h1>配种导航 <span style="color:var(--muted)">· 词条遗传成本</span></h1>
+  <p class="sub">每步词条单方继承 50%、双方 75%；每配一次消耗 1 个蛋糕，按期望蛋糕数找最省路线。</p>
 </header>
 <main>
   <section class="panel">
-    <label>输入的帕鲁（逗号/换行分隔，支持中文/拼音/No）</label>
-    <textarea id="inputs" placeholder="例：唤冬兽, 严冬鹿, 雷冠龙">唤冬兽</textarea>
+    <label>输入的帕鲁（逗号/换行分隔，支持中文/拼音/No；默认都带下面的词条）</label>
+    <textarea id="inputs">唤冬兽</textarea>
+    <label>要遗传的词条（可留空）</label>
+    <input id="passive" value="传说" placeholder="如 传说 / Legend">
     <label>目标帕鲁</label>
     <input id="target" value="翠羽龙">
-    <button id="go">导航</button>
+    <button id="go">导航并算成本</button>
+    <p class="hint">外部候选（不在输入里）默认不带词条，所以每步按 50% 算；输入帕鲁之间互配按 75%。</p>
     <div class="status" id="status">加载数据…</div>
   </section>
   <section class="panel">
@@ -122,25 +122,25 @@ class Heap{
   down(i){const n=this.a.length;while(true){let l=i*2+1,r=l+1,m=i;if(l<n&&this.less(l,m))m=l;if(r<n&&this.less(r,m))m=r;if(m===i)break;const t=this.a[i];this.a[i]=this.a[m];this.a[m]=t;i=m;}}
 }
 
-function search(inputs,target){
+function search(inputs,target,passiveId){
   const dist=reverseDist(target);
   const inputSet=new Set(inputs);
   const pq=new Heap();
-  const seen=new Map(); // pal -> [steps,ext,dexsum]
-  const startStates=inputs.map(p=>({pal:p,steps:0,ext:0,dex:0,path:[]}));
-  for(const s of startStates){ pq.push(s,[s.steps+dist[s.pal],s.ext,s.dex,s.steps]); }
-  let best=null,bestKey=null,expansions=0;
+  const best=new Map();
+  let bestResult=null,bestKey=null,expansions=0;
+  for(const p of inputs){
+    const carry=!!passiveId;
+    pq.push({pal:p,carry,cost:0,prob:1,ext:0,dex:0,steps:0,path:[]},[0,0,0,0]);
+  }
   while(pq.size&&expansions<300000){
     const s=pq.pop(); expansions++;
-    if(s.pal===target){
-      const key=[s.steps,s.ext,s.dex];
-      if(!bestKey||key<bestKey){best=s;bestKey=key;}
+    if(s.pal===target&&(!passiveId||s.carry)){
+      const key=[s.cost,s.ext,s.dex,s.steps];
+      if(!bestKey||key<bestKey){bestKey=key;bestResult=s;}
       continue;
     }
-    if(dist[s.pal]===undefined||dist[s.pal]===0) continue;
-    if(s.steps>=8) continue;
+    if(s.steps>=10) continue;
     const cands=(state.edges[s.pal]||[]).filter(([child,other])=>child!==s.pal);
-    // 关键：外部候选按 No 优先（在 h 相同/接近时）
     cands.sort((x,y)=>{
       const hx=dist[x[0]]??999, hy=dist[y[0]]??999;
       if(hx!==hy) return hx-hy;
@@ -153,65 +153,76 @@ function search(inputs,target){
       if(expanded>=12) break;
       if(seenChild.has(child)) continue;
       seenChild.add(child); expanded++;
-      const extAdd=inputSet.has(other)?0:1;
-      const dexAdd=inputSet.has(other)?0:dexNum(other);
-      const ns={pal:child,steps:s.steps+1,ext:s.ext+extAdd,dex:s.dex+dexAdd,
-        path:s.path.concat([{from:s.pal,other,child,external:!inputSet.has(other)}])};
-      const prev=seen.get(child);
-      if(prev&&(prev[0]<ns.steps||(prev[0]===ns.steps&&prev[1]<ns.ext)||(prev[0]===ns.steps&&prev[1]===ns.ext&&prev[2]<=ns.dex))) continue;
-      seen.set(child,[ns.steps,ns.ext,ns.dex]);
+      const otherInInput=inputSet.has(other);
+      const otherCarry=!!passiveId&&otherInInput;
+      let p=0;
+      if(passiveId){
+        if(s.carry&&otherCarry) p=0.75;
+        else if(s.carry||otherCarry) p=0.5;
+      }
+      const stepCost=passiveId?(p>0?1/p:0):0;
+      const ns={pal:child,carry:s.carry||otherCarry,cost:s.cost+stepCost,
+        prob:s.prob*(passiveId?p:1),ext:s.ext+(otherInInput?0:1),
+        dex:s.dex+(otherInInput?0:dexNum(other)),steps:s.steps+1,
+        path:s.path.concat([{from:s.pal,other,child,external:!otherInInput,p:passiveId?p:1,stepCost}])};
+      const key=`${child}|${ns.carry?1:0}`;
+      const prev=best.get(key);
+      if(prev&&(prev[0]<ns.cost||(prev[0]===ns.cost&&prev[1]<ns.ext)||(prev[0]===ns.cost&&prev[1]===ns.ext&&prev[2]<=ns.dex))) continue;
+      best.set(key,[ns.cost,ns.ext,ns.dex]);
       const h=dist[child]??999;
-      pq.push(ns,[ns.steps+h,ns.ext,ns.dex,ns.steps]);
+      pq.push(ns,[ns.cost,ns.ext,ns.dex,ns.steps+h]);
     }
   }
-  return best;
+  return bestResult;
 }
 
 function render(result,inputs,target){
   const out=$("out");
-  if(!result){out.innerHTML=`<p class="sub">没有找到路径（可能深度/图不连通）。</p>`;return;}
+  if(!result){out.innerHTML=`<p class="sub">没有找到可行路线（可能该词条无法传到目标，或深度不够）。</p>`;return;}
   const rows=result.path.map((p,i)=>{
     const ext=p.external?`<span class="tag ext">外部 No.${dexStr(p.other)}</span>`:`<span class="tag in">输入</span>`;
     return `<tr><td>${i+1}</td>
       <td>${nameOf(p.from)} <span class="mono">${p.from}</span></td>
       <td>${nameOf(p.other)} <span class="mono">${p.other}</span><br>${ext}</td>
-      <td>${nameOf(p.child)} <span class="mono">${p.child}</span><br><span class="tag">No.${dexStr(p.child)}</span></td></tr>`;
+      <td>${nameOf(p.child)} <span class="mono">${p.child}</span><br><span class="tag">No.${dexStr(p.child)}</span></td>
+      <td>${(p.p*100).toFixed(0)}%</td>
+      <td>${p.stepCost?p.stepCost.toFixed(2):"—"}</td></tr>`;
   }).join("");
-  const sum=`总步数 ${result.steps} · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
-  out.innerHTML=`<div class="summary">${sum}</div>
-    <table><thead><tr><th>#</th><th>当前（血统）</th><th>另一亲本</th><th>子代</th></tr></thead>
+  const pct=(result.prob*100).toFixed(1);
+  out.innerHTML=`<div class="summary">总步数 ${result.steps} · 成功率 ${pct}% · 期望蛋糕 ${result.cost.toFixed(2)} · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}</div>
+    <table><thead><tr><th>#</th><th>当前（血统）</th><th>另一亲本</th><th>子代</th><th>本步概率</th><th>本步蛋糕</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <div class="cands"><h3>本步外部候选（按 No 优先排序，示例）</h3>
-      ${candidatePreview(result.path, inputs)}</div>`;
-}
-
-function candidatePreview(path,inputs){
-  if(!path.length) return `<p class="sub">已经在目标。</p>`;
-  const inputSet=new Set(inputs);
-  const last=path[path.length-1];
-  const cands=(state.edges[last.child]||[]).filter(([c,o])=>c!==last.child);
-  cands.sort((x,y)=>dexNum(x[1])-dexNum(y[1]));
-  return cands.slice(0,8).map(([c,o])=>`<div class="cand"><span class="no">No.${dexStr(o)}</span><span>${nameOf(o)}</span>
-    <span class="mono">+ ${nameOf(c)}</span>${inputSet.has(o)?`<span class="tag in">输入</span>`:`<span class="tag ext">外部</span>`}</div>`).join("");
+    <p class="hint">成本按“每步失败重试”累计：本步期望 = 1/本步概率；总期望 = 各步期望之和。</p>`;
 }
 
 $("go").onclick=()=>{
   const raw=$("inputs").value.split(/[,，、\n]+/).map(s=>s.trim()).filter(Boolean);
   const inputs=raw.map(resolveId).filter(Boolean);
   const target=resolveId($("target").value);
+  const passiveText=$("passive").value.trim();
+  const passiveId=passiveText?resolveIdPassive(passiveText):null;
   if(!inputs.length||!target){$("status").textContent="输入或目标没识别出来";return;}
-  $("status").textContent=`导航：${inputs.map(nameOf).join(" / ")} → ${nameOf(target)}`;
+  if(passiveText&&!passiveId){$("status").textContent="词条没识别出来（试试 传说/Legend）";return;}
+  $("status").textContent=`导航：${inputs.map(nameOf).join(" / ")} → ${nameOf(target)}${passiveId?"（带 "+passiveText+"）":""}`;
   const t0=performance.now();
-  const r=search(inputs,target);
+  const r=search(inputs,target,passiveId);
   const dt=Math.round(performance.now()-t0);
-  if(r) $("status").textContent=`完成，用时 ${dt} ms`;
+  $("status").textContent=`完成，用时 ${dt} ms`;
   render(r,inputs,target);
 };
+
+function resolveIdPassive(text){
+  const map={"传说":"Legend","运动健将":"MoveSpeed_up_2","灵活":"MoveSpeed_up_1","永动机":"Stamina_Up_3"};
+  if(map[text]) return map[text];
+  if(text.toLowerCase()==="legend") return "Legend";
+  return text;
+}
 
 load().then(()=>{
   const q=new URLSearchParams(location.search);
   if(q.get("inputs")) $("inputs").value=q.get("inputs");
   if(q.get("target")) $("target").value=q.get("target");
+  if(q.get("passive")) $("passive").value=q.get("passive");
   if(q.get("inputs")||q.get("target")) $("go").click();
 });
 </script>
