@@ -52,8 +52,11 @@ async function init() {
     for (const d of demos) await addImage(d, d);
     const tq = params.get("target");
     if (tq) { const tid = resolveId(tq); if (tid) { setTarget(tid); openTarget(); } }
-    const open = params.get("open");
-    if (open) { const id = resolveId(open); if (id) { state.expanded.set(id, { page: 0 }); renderExplorer(); } }
+    for (const open of params.getAll("open")) {
+      const id = resolveId(open);
+      if (id) state.expanded.set(id, { page: 0 });
+    }
+    if (params.getAll("open").length) renderExplorer();
   } catch (e) { $("status").textContent = "初始化失败：" + e.message; }
 }
 

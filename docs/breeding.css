@@ -57,7 +57,7 @@
 .more:hover{color:var(--fg)}
 .times{color:var(--muted)}
 
-.explorer{margin-top:10px;max-height:72vh;overflow:auto;padding-right:6px}
+.explorer{margin-top:10px;max-height:calc(100vh - 430px);min-height:240px;overflow-x:scroll;overflow-y:auto;padding-right:6px}
 .explorer-tree{display:flex;flex-direction:column;gap:8px}
 .enode{display:flex;flex-direction:column;gap:8px}
 .card{display:flex;align-items:center;gap:8px;background:#161d25;border:1px solid #2a3642;border-radius:10px;padding:5px 9px;cursor:pointer;max-width:270px;position:relative;user-select:none}
@@ -85,3 +85,13 @@
 .mini{margin-left:auto;font-size:11px;padding:3px 8px;border-radius:999px;background:#132a3a;border:1px solid #1f4a63;color:#7fd1ff;cursor:pointer}
 .mini:hover{background:#173a52}
 .mini.busy{opacity:.6;cursor:default}
+
+/* horizontal scrolling for wide trees */
+.breed-main > .panel{min-width:0}
+.explorer{overflow:auto;max-width:100%;max-height:calc(100vh - 430px);min-height:240px;overflow-x:scroll;scrollbar-width:thin;scrollbar-color:#3a4a5a #0f1216}
+.explorer-tree{min-width:max-content}
+.explorer::-webkit-scrollbar{width:10px;height:10px}
+.explorer::-webkit-scrollbar-track{background:#0f1216}
+.explorer::-webkit-scrollbar-thumb{background:#33414f;border-radius:6px;border:2px solid #0f1216}
+.explorer::-webkit-scrollbar-thumb:hover{background:#455a6d}
+.plan-block{flex-wrap:nowrap}
