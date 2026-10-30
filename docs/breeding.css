@@ -100,3 +100,12 @@
 .own-add button{font-size:12px;padding:5px 10px}
 .chip .chip-x{margin-left:4px;background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px}
 .chip .chip-x:hover{color:#ff8a7a}
+
+.nav-summary{margin:10px 0;padding:8px 10px;border-radius:8px;background:#12241b;border:1px solid #1f5c34;color:#a9f0c5;font-size:13px}
+.nav-flex{display:grid;grid-template-columns:minmax(300px,1fr) 1.15fr;gap:10px;align-items:start}
+@media(max-width:1100px){.nav-flex{grid-template-columns:1fr}}
+.nav-table{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.nav-table table{width:100%;border-collapse:collapse;font-size:12px}
+.nav-table th,.nav-table td{padding:6px 8px;border-bottom:1px solid #222a33;text-align:left;vertical-align:top}
+.nav-table th{color:var(--muted);font-weight:500;position:sticky;top:0;background:#171c22}
+#navCanvas{width:100%;height:520px;background:#0b0e11;border:1px solid var(--line);border-radius:10px;cursor:grab;touch-action:none}

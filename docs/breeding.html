@@ -34,6 +34,7 @@
     <div class="tabs mode-tabs">
       <button data-mode="rev" class="on">反查：目标 → 全部方案</button>
       <button data-mode="fwd">正查：父母 → 子代</button>
+      <button data-mode="nav">导航：输入 → 目标</button>
     </div>
 
     <div id="revPanel">
@@ -54,6 +55,22 @@
       <div id="explorer" class="explorer"><p class="hint">先选择目标帕鲁。</p></div>
     </div>
 
+
+    <div id="navPanel" hidden>
+      <h2>导航：输入帕鲁 → 目标</h2>
+      <div class="controls">
+        <input id="navInputs" placeholder="输入帕鲁（逗号分隔，中文/拼音/No）">
+        <input id="navPassive" placeholder="要遗传的词条（可空，如 传说）">
+        <input id="navTarget" placeholder="目标帕鲁（中文/拼音/No）">
+        <button id="navGo">导航并算成本</button>
+      </div>
+      <p class="hint">每步单方继承 50%、双方 75%；配一次 1 个蛋糕，按期望蛋糕数找最省路线；外部候选按 No 优先（B 变体加 总帕鲁数/2）。</p>
+      <div id="navSummary" class="nav-summary"></div>
+      <div class="nav-flex">
+        <div id="navTable" class="nav-table"></div>
+        <canvas id="navCanvas" width="900" height="520"></canvas>
+      </div>
+    </div>
     <div id="fwdPanel" hidden>
       <h2>父母 → 子代</h2>
       <div class="controls">

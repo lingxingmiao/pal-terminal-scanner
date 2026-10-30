@@ -52,6 +52,13 @@ async function init() {
     for (const d of demos) await addImage(d, d);
     const man = params.get("manual");
     if (man) { for (const t of man.split(",")) { const id = resolveId(t); if (id) { state.manualAdd.add(id); state.manualRemove.delete(id); } } mergeOwned(); renderOwned(); }
+    if(params.get("mode")==="nav"){
+      switchMode("nav");
+      if(params.get("navInputs")) $("navInputs").value=params.get("navInputs");
+      if(params.get("navPassive")) $("navPassive").value=params.get("navPassive");
+      if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
+      if(params.get("navInputs")) $("navGo").click();
+    }
     const tq = params.get("target");
     if (tq) { const tid = resolveId(tq); if (tid) { setTarget(tid); openTarget(); } }
     for (const open of params.getAll("open")) {
@@ -412,6 +419,188 @@ $("ownAdd").onclick = () => {
 };
 $("ownInput").addEventListener("keydown", e => { if (e.key === "Enter") $("ownAdd").click(); });
 
+
+// ---------------- navigation ----------------
+const NAV_PASSIVES = {"传说":"Legend","运动健将":"MoveSpeed_up_2","灵活":"MoveSpeed_up_1","永动机":"Stamina_Up_3"};
+function resolveIdPassive(t){ const low=(t||"").toLowerCase(); for(const k in NAV_PASSIVES) if(k===t||NAV_PASSIVES[k].toLowerCase()===low) return NAV_PASSIVES[k]; return null; }
+function dexNum(id){const m=state.meta&&state.meta[id]&&state.meta[id].dex;const g=m&&m.match(/^(\d+)([a-z])?/i);if(!g)return 9999;const base=+g[1];const total=Object.keys(state.meta||{}).length;return (g[2]||"").toLowerCase()==="b"?base+total/2:base;}
+function navEdges(){
+  if(!state.edges){
+    state.edges={};
+    for(const [child,pairs] of Object.entries(state.breed)){
+      for(const [a,b] of pairs){
+        (state.edges[a]||(state.edges[a]=[])).push([child,b]);
+        (state.edges[b]||(state.edges[b]=[])).push([child,a]);
+      }
+    }
+  }
+  return state.edges;
+}
+function reverseDist(target){
+  const dist={[target]:0}, q=[target], rev={};
+  for(const [child,pairs] of Object.entries(state.breed)) for(const [a,b] of pairs){(rev[child]||(rev[child]=[])).push(a,b);}
+  while(q.length){const u=q.shift();for(const p of (rev[u]||[])){if(dist[p]===undefined){dist[p]=dist[u]+1;q.push(p);}}}
+  return dist;
+}
+function navSearch(inputs,target,passiveId){
+  const edges=navEdges(), dist=reverseDist(target), inputSet=new Set(inputs);
+  const pq=new Heap(); const best=new Map();
+  let bestResult=null,bestKey=null,exp=0;
+  for(const p of inputs) pq.push({pal:p,carry:!!passiveId,cost:0,prob:1,ext:0,dex:0,steps:0,path:[]},[0,0,0,0]);
+  while(pq.size&&exp<200000){
+    const s=pq.pop(); exp++;
+    if(s.pal===target&&(!passiveId||s.carry)){
+      const key=[s.cost,s.ext,s.dex,s.steps];
+      if(!bestKey||key<bestKey){bestKey=key;bestResult=s;}
+      continue;
+    }
+    if(s.steps>=10) continue;
+    const cands=(edges[s.pal]||[]).filter(([child,other])=>child!==s.pal);
+    cands.sort((x,y)=>{
+      const hx=dist[x[0]]??999, hy=dist[y[0]]??999;
+      if(hx!==hy) return hx-hy;
+      const ex=inputSet.has(x[1])?0:1, ey=inputSet.has(y[1])?0:1;
+      if(ex!==ey) return ex-ey;
+      return dexNum(x[1])-dexNum(y[1]);
+    });
+    const seenChild=new Set(); let expanded=0;
+    for(const [child,other] of cands){
+      if(expanded>=12) break;
+      if(seenChild.has(child)) continue;
+      seenChild.add(child); expanded++;
+      const otherIn=inputSet.has(other);
+      const otherCarry=!!passiveId&&otherIn;
+      let p=0;
+      if(passiveId){
+        if(s.carry&&otherCarry) p=0.75;
+        else if(s.carry||otherCarry) p=0.5;
+      }
+      const stepCost=passiveId?(p>0?1/p:0):1;
+      const ns={pal:child,carry:s.carry||otherCarry,cost:s.cost+stepCost,
+        prob:s.prob*(passiveId?p:1),ext:s.ext+(otherIn?0:1),
+        dex:s.dex+(otherIn?0:dexNum(other)),steps:s.steps+1,
+        path:s.path.concat([{from:s.pal,other,child,external:!otherIn,p:passiveId?p:1,stepCost}])};
+      const key=child+"|"+(ns.carry?1:0);
+      const prev=best.get(key);
+      if(prev&&(prev[0]<ns.cost||(prev[0]===ns.cost&&prev[1]<ns.ext)||(prev[0]===ns.cost&&prev[1]===ns.ext&&prev[2]<=ns.dex))) continue;
+      best.set(key,[ns.cost,ns.ext,ns.dex]);
+      pq.push(ns,[ns.cost,ns.ext,ns.dex,navDist(ns.pal,target,dist)]);
+    }
+  }
+  return bestResult;
+}
+function navDist(pal,target,dist){ return dist[pal]===undefined?999:dist[pal]; }
+
+class Heap{
+  constructor(){this.a=[];}
+  get size(){return this.a.length;}
+  push(item,key){this.a.push({item,key});this.up(this.a.length-1);}
+  pop(){const top=this.a[0];const last=this.a.pop();if(this.a.length){this.a[0]=last;this.down(0);}return top.item;}
+  less(i,j){const a=this.a[i].key,b=this.a[j].key;for(let k=0;k<a.length;k++){if(a[k]!==b[k])return a[k]<b[k];}return false;}
+  up(i){while(i>0){const p=(i-1)>>1;if(this.less(i,p)){const t=this.a[i];this.a[i]=this.a[p];this.a[p]=t;i=p;}else break;}}
+  down(i){const n=this.a.length;while(true){let l=i*2+1,r=l+1,m=i;if(l<n&&this.less(l,m))m=l;if(r<n&&this.less(r,m))m=r;if(m===i)break;const t=this.a[i];this.a[i]=this.a[m];this.a[m]=t;i=m;}}
+}
+
+function renderNav(result,inputs,target){
+  if(!result){$("navSummary").textContent="没有找到可行路线（词条可能无法传到目标，或输入帕鲁不带该词条）。";$("navTable").innerHTML="";return;}
+  const pct=(result.prob*100).toFixed(1);
+  $("navSummary").textContent=`总步数 ${result.steps} · 成功率 ${pct}% · 期望蛋糕 ${result.cost.toFixed(2)} · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
+  const rows=result.path.map((p,i)=>{
+    const ext=p.external?`<span class="tag ext">外部 No.${dexNum(p.other)}</span>`:`<span class="tag in">输入</span>`;
+    return `<tr><td>${i+1}</td><td>${nameOf(p.from)}<br><span class="mono">${p.from}</span></td>
+      <td>${nameOf(p.other)}<br><span class="mono">${p.other}</span> ${ext}</td>
+      <td>${nameOf(p.child)}<br><span class="mono">${p.child}</span></td>
+      <td>${(p.p*100).toFixed(0)}%</td><td>${p.stepCost?p.stepCost.toFixed(2):"—"}</td></tr>`;
+  }).join("");
+  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>当前</th><th>另一亲本</th><th>子代</th><th>概率</th><th>蛋糕</th></tr></thead><tbody>${rows}</tbody></table>`;
+  drawNavGraph(result,inputs,target);
+}
+
+// ---- star graph ----
+const navView={nodes:[],edges:[],w:900,h:520,drag:null,scale:1};
+function buildNavGraph(result,inputs,target){
+  const inputSet=new Set(inputs), nodes=new Map(), edges=[];
+  const add=(id,type)=>{ if(!nodes.has(id)) nodes.set(id,{id,type,x:0,y:0}); const n=nodes.get(id); if(type==="target") n.type="target"; else if(n.type!=="target") n.type=type; return n; };
+  add(target,"target");
+  for(const p of result.path){
+    const f=add(p.from,inputSet.has(p.from)?"owned":"external");
+    const o=add(p.other,p.external?"external":"owned");
+    const c=add(p.child,p.child===target?"target":"child");
+    edges.push({a:f.id,b:c.id,kind:"path"});
+    edges.push({a:o.id,b:c.id,kind:"path"});
+    const cands=(navEdges()[f.id]||[]).filter(([ch,ot])=>ch!==f.id).slice(0,4);
+    for(const [ch,ot] of cands){ const cn=add(ot,"candidate"); edges.push({a:f.id,b:cn.id,kind:"cand"}); }
+  }
+  navView.nodes=[...nodes.values()]; navView.edges=edges;
+  layoutNav();
+}
+function layoutNav(){
+  const {nodes,edges,w,h}=navView;
+  const targetNode=nodes.find(n=>n.type==="target");
+  nodes.forEach((n,i)=>{ const a=i/nodes.length*Math.PI*2; n.x=w/2+Math.cos(a)*Math.min(w,h)*0.28; n.y=h/2+Math.sin(a)*Math.min(w,h)*0.28; });
+  if(targetNode){ targetNode.x=w/2; targetNode.y=h/2; }
+  const k=Math.sqrt((w*h)/nodes.length)*0.52;
+  for(let it=0;it<320;it++){
+    for(let i=0;i<nodes.length;i++) for(let j=i+1;j<nodes.length;j++){
+      if(nodes[i]===targetNode||nodes[j]===targetNode) continue;
+      const a=nodes[i],b=nodes[j]; let dx=b.x-a.x,dy=b.y-a.y; let d2=dx*dx+dy*dy;
+      if(d2<1){dx=Math.random()-0.5;dy=Math.random()-0.5;d2=1;}
+      const f=k*k/d2, d=Math.sqrt(d2), fx=f*dx/d, fy=f*dy/d;
+      a.x-=fx; a.y-=fy; b.x+=fx; b.y+=fy;
+    }
+    for(const e of edges){ const a=nodes.find(n=>n.id===e.a),b=nodes.find(n=>n.id===e.b); if(!a||!b)continue;
+      let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1; const f=(d-110)*0.03;
+      const fx=f*dx/d, fy=f*dy/d; a.x+=fx; a.y+=fy; b.x-=fx; b.y-=fy;
+    }
+    for(const n of nodes){ if(n===targetNode) continue; n.x+=(w/2-n.x)*0.01; n.y+=(h/2-n.y)*0.01; n.x=Math.max(60,Math.min(w-60,n.x)); n.y=Math.max(34,Math.min(h-34,n.y)); }
+    if(targetNode){ targetNode.x=w/2; targetNode.y=h/2; }
+  }
+}
+function drawNavGraph(result,inputs,target){
+  buildNavGraph(result,inputs,target);
+  paintNavGraph();
+}
+function paintNavGraph(){
+  const cv=$("navCanvas"), ctx=cv.getContext("2d"), dpr=window.devicePixelRatio||1;
+  cv.width=navView.w*dpr; cv.height=navView.h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const pos=new Map(navView.nodes.map(n=>[n.id,n]));
+  ctx.clearRect(0,0,navView.w,navView.h);
+  // edges
+  for(const e of navView.edges){
+    const a=pos.get(e.a),b=pos.get(e.b); if(!a||!b)continue;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+    if(e.kind==="path"){ ctx.strokeStyle="rgba(255,138,122,.85)"; ctx.lineWidth=2; }
+    else { ctx.strokeStyle="rgba(60,80,100,.55)"; ctx.lineWidth=1; ctx.setLineDash([4,4]); }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // nodes
+  for(const n of navView.nodes){
+    const r=n.id===target?16:12;
+    let fill="#4a5a6a";
+    if(n.type==="target") fill="#ff6b5e";
+    else if(n.type==="owned") fill="#38d47a";
+    else if(n.type==="external") fill="#ffb86b";
+    else if(n.type==="child") fill="#7fd1ff";
+    ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
+    ctx.fillStyle=fill; ctx.fill();
+    ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=1; ctx.stroke();
+    const label=nameOf(n.id)+(n.type==="candidate"?"":` (${dexNum(n.id)})`);
+    ctx.font="12px 'Microsoft YaHei',sans-serif";
+    const tw=ctx.measureText(label).width;
+    ctx.fillStyle="rgba(8,10,12,.72)"; ctx.fillRect(n.x-tw/2-3,n.y+r+3,tw+6,16);
+    ctx.fillStyle="#dfe8f0"; ctx.fillText(label,n.x-tw/2,n.y+r+15);
+  }
+}
+// drag
+(function(){
+  const cv=$("navCanvas");
+  const toCanvas=(e)=>{const r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)*(navView.w/r.width),y:(e.clientY-r.top)*(navView.h/r.height)};};
+  cv.addEventListener("mousedown",e=>{const p=toCanvas(e);let hit=null;for(const n of navView.nodes){if((n.x-p.x)**2+(n.y-p.y)**2<400){hit=n;break;}}navView.drag=hit;cv.style.cursor=hit?"grabbing":"grab";});
+  window.addEventListener("mousemove",e=>{if(!navView.drag)return;const p=toCanvas(e);navView.drag.x=p.x;navView.drag.y=p.y;paintNavGraph();});
+  window.addEventListener("mouseup",()=>{navView.drag=null;cv.style.cursor="grab";});
+})();
+
 // ---------------- events ----------------
 async function addFiles(files) {
   for (const f of files) {
@@ -429,6 +618,19 @@ const drop = $("drop");
 drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
+$("navGo").onclick = () => {
+  const raw=$("navInputs").value.split(/[,，、\n]+/).map(s=>s.trim()).filter(Boolean);
+  const inputs=raw.map(resolveId).filter(Boolean);
+  const target=resolveId($("navTarget").value);
+  const pt=$("navPassive").value.trim();
+  const pid=pt?(NAV_PASSIVES[pt]||resolveIdPassive(pt)):null;
+  if(!inputs.length||!target){$("status").textContent="导航：输入或目标没识别出来";return;}
+  if(pt&&!pid){$("status").textContent="导航：词条没识别出来";return;}
+  $("status").textContent=`导航：${inputs.map(nameOf).join(" / ")} → ${nameOf(target)}`;
+  const r=navSearch(inputs,target,pid);
+  if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
+  renderNav(r,inputs,target);
+};
 $("gen").onclick = () => { const id = resolveId($("target").value); if (!id) return; setTarget(id); openTarget(); };
 $("target").addEventListener("keydown", e => { if (e.key === "Enter") $("gen").click(); });
 $("collapse").onclick = () => { state.expanded = new Map(); renderExplorer(); };
@@ -440,6 +642,7 @@ function switchMode(mode) {
   [...document.querySelectorAll(".mode-tabs button")].forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
   $("revPanel").hidden = mode !== "rev";
   $("fwdPanel").hidden = mode !== "fwd";
+  $("navPanel").hidden = mode !== "nav";
 }
 document.querySelectorAll(".mode-tabs button").forEach(b => b.onclick = () => switchMode(b.dataset.mode));
 
