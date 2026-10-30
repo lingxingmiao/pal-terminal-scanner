@@ -555,6 +555,16 @@ function renderNav(result,inputs,target){
 
 // ---- star graph ----
 const navView={nodes:[],edges:[],w:900,h:520,drag:null,scale:1};
+const navIconImg=new Map();
+function getNavIcon(id){
+  if(!state.icons||!state.icons[id]) return null;
+  if(navIconImg.has(id)) return navIconImg.get(id);
+  const im=new Image();
+  im.onload=()=>{ try{ paintNavGraph(); }catch(e){} };
+  im.src=state.icons[id];
+  navIconImg.set(id,im);
+  return im;
+}
 function buildNavGraph(result,inputs,target){
   const inputSet=new Set(inputs), nodes=new Map(), edges=[];
   const add=(id,type)=>{ if(!nodes.has(id)) nodes.set(id,{id,type,x:0,y:0}); const n=nodes.get(id); if(type==="target") n.type="target"; else if(n.type!=="target") n.type=type; return n; };
@@ -611,22 +621,28 @@ function paintNavGraph(){
     else { ctx.strokeStyle="rgba(60,80,100,.55)"; ctx.lineWidth=1; ctx.setLineDash([4,4]); }
     ctx.stroke(); ctx.setLineDash([]);
   }
-  // nodes
+  // nodes (round thumbnails)
   for(const n of navView.nodes){
-    const r=n.id===target?16:12;
-    let fill="#4a5a6a";
-    if(n.type==="target") fill="#ff6b5e";
-    else if(n.type==="owned") fill="#38d47a";
-    else if(n.type==="external") fill="#ffb86b";
-    else if(n.type==="child") fill="#7fd1ff";
+    const r=n.id===target?24:18;
+    let ring="#4a5a6a";
+    if(n.type==="target") ring="#ff6b5e";
+    else if(n.type==="owned") ring="#38d47a";
+    else if(n.type==="external") ring="#ffb86b";
+    else if(n.type==="child") ring="#7fd1ff";
+    const img=getNavIcon(n.id);
+    ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2); ctx.closePath();
+    if(img && img.complete && img.naturalWidth){
+      ctx.save(); ctx.clip(); ctx.drawImage(img,n.x-r,n.y-r,2*r,2*r); ctx.restore();
+    } else {
+      ctx.fillStyle=ring; ctx.fill();
+    }
     ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
-    ctx.fillStyle=fill; ctx.fill();
-    ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=1; ctx.stroke();
+    ctx.strokeStyle=ring; ctx.lineWidth=n.type==="candidate"?2:3; ctx.stroke();
     const label=nameOf(n.id)+(n.type==="candidate"?"":` (${dexNum(n.id)})`);
     ctx.font="12px 'Microsoft YaHei',sans-serif";
     const tw=ctx.measureText(label).width;
-    ctx.fillStyle="rgba(8,10,12,.72)"; ctx.fillRect(n.x-tw/2-3,n.y+r+3,tw+6,16);
-    ctx.fillStyle="#dfe8f0"; ctx.fillText(label,n.x-tw/2,n.y+r+15);
+    ctx.fillStyle="rgba(8,10,12,.78)"; ctx.fillRect(n.x-tw/2-3,n.y+r+4,tw+6,16);
+    ctx.fillStyle="#dfe8f0"; ctx.fillText(label,n.x-tw/2,n.y+r+16);
   }
 }
 // drag
