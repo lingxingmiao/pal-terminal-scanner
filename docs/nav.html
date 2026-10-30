@@ -55,7 +55,15 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 const $=(id)=>document.getElementById(id);
 const state={breed:null,meta:null,zh:null,edges:null};
 const nameOf=(id)=>(state.zh&&state.zh[id])||id;
-function dexNum(id){const m=state.meta&&state.meta[id]&&state.meta[id].dex;const n=m&&m.match(/^(\d+)/);return n?+n[1]:9999;}
+function dexNum(id){
+  const m=state.meta&&state.meta[id]&&state.meta[id].dex;
+  const g=m&&m.match(/^(\d+)([a-z])?/i);
+  if(!g) return 9999;
+  const base=+g[1];
+  const total=Object.keys(state.meta||{}).length;
+  if((g[2]||"").toLowerCase()==="b") return base + total/2; // B 变体加总帕鲁数/2
+  return base;
+}
 function dexStr(id){return (state.meta&&state.meta[id]&&state.meta[id].dex)||"—";}
 
 async function load(){
