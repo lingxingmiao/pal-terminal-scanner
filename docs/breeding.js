@@ -705,6 +705,11 @@ function addPlan(id,a,b){
   const key=planKey(a,b);
   const set=planSet(id);
   if(set.has(key)) return;
+  const newNodes=[a,b].filter(p=>!navView.nodes.some(n=>n.id===p)).length;
+  if(navView.nodes.length+newNodes>80){
+    $("status").textContent="展开的节点太多啦，先「收起全部分支」再选";
+    return;
+  }
   set.add(key);
   const ownedSet=new Set(navPick.size?navPick:state.owned);
   for(const p of [a,b]){
@@ -859,6 +864,12 @@ $("navGroupSave").onclick=()=>{
 };
 $("navPickAll").onclick=()=>{ for(const id of state.owned) navPick.add(id); renderNavPick(); if(navGroupIdx>=0){ navGroups[navGroupIdx].ids=[...navPick]; saveGroups(); renderGroupCards(); } };
 $("navPickNone").onclick=()=>{ navPick.clear(); renderNavPick(); if(navGroupIdx>=0){ navGroups[navGroupIdx].ids=[]; saveGroups(); renderGroupCards(); } };
+$("navCollapse").onclick=()=>{
+  const r=navView.lastResult; if(!r) return;
+  drawNavGraph(r,r._inputs,r._target);
+  $("nodePop").hidden=true;
+  $("status").textContent="已收起所有展开分支";
+};
 
 // ---------------- events ----------------
 async function addFiles(files) {
