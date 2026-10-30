@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>给你配了 - 幻兽帕鲁自动配种工具</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="breeding.css">
+</head>
+<body>
+<header>
+  <h1>给你配了 <span class="muted">· 幻兽帕鲁自动配种工具</span></h1>
+  <p class="sub">
+    上传/粘贴终端截图可识别你已有的帕鲁，配种树优先用你已有的当父母；也可以不传截图直接查。
+    <span class="ai">AI 编写的网页 · 帕鲁识别由 AI 模型完成</span>
+  </p>
+</header>
+
+<main class="breed-main">
+  <section class="panel">
+    <h2>1. 你已有的帕鲁 <span class="muted" id="ownCount"></span></h2>
+    <div id="drop" class="drop">
+      <p>把终端截图拖进来，或 <b>Ctrl+V</b> 粘贴，或</p>
+      <label class="file">选择截图<input type="file" id="file" accept="image/*"></label>
+      <p class="hint">识别结果只用于“优先用已有帕鲁配种”，不上传服务器（纯本地推理）。</p>
+    </div>
+    <div id="status" class="status">模型加载中…</div>
+    <div id="chips" class="chips"></div>
+    <div id="recs" class="recs"></div>
+  </section>
+
+  <section class="panel">
+    <h2>2. 想要配出</h2>
+    <div class="controls">
+      <input id="target" list="pallist" placeholder="输入中文名或内部 ID，例如：棉悠悠 / SheepBall" autocomplete="off">
+      <datalist id="pallist"></datalist>
+      <label>层数
+        <select id="depth">
+          <option value="1">1 层（父母）</option>
+          <option value="2" selected>2 层（父母+祖父母）</option>
+          <option value="3">3 层（父母+祖父母+曾祖父母）</option>
+        </select>
+      </label>
+      <button id="gen">生成配种树</button>
+    </div>
+    <p class="hint">绿色 ✓ 表示你已有；没有截图时按“固定组合优先”生成。</p>
+    <div id="tree" class="tree-wrap"><p class="hint">先选择目标帕鲁。</p></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>素材（帕鲁图标、名称、配种数据）版权归 <b>Pocketpair, Inc.</b> 所有，本工具仅用于粉丝研究与学习。</p>
+  <p>本页面由 AI 编写；帕鲁识别使用 AI 图像分类模型（ONNX Runtime Web）。 · <a href="index.html">返回识别页</a></p>
+</footer>
+
+<script src="vendor/ort.min.js"></script>
+<script src="breeding.js"></script>
+</body>
+</html>
