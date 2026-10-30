@@ -63,6 +63,7 @@ async function init() {
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
       if(params.get("navTarget")) $("navGo").click();
       if(params.get("pop")){ const pid=resolveId(params.get("pop")); if(pid) setTimeout(()=>openNodePop(pid),400); }
+      if(params.get("expand")){ const eid=resolveId(params.get("expand")); if(eid) setTimeout(()=>{ expandPlans(eid,6); openNodePop(eid); },500); }
       if(params.get("testclick")){
         setTimeout(()=>{
           const cv=$("navCanvas"); const n=navView.nodes.find(x=>x.type==="target")||navView.nodes[0];
@@ -746,6 +747,25 @@ function removePlan(id,a,b){
   layoutNav(); paintNavGraph();
 }
 function togglePlan(id,a,b){ isPlanOpen(id,a,b) ? removePlan(id,a,b) : addPlan(id,a,b); }
+function expandPlans(id,limit=6){
+  const pairs=(state.breed[id]||[]).filter(p=>!(p[0]===id&&p[1]===id)).slice(0,limit);
+  const ownedSet=new Set(navPick.size?navPick:state.owned);
+  let changed=false;
+  for(const [a,b] of pairs){
+    const key=planKey(a,b);
+    if(planSet(id).has(key)) continue;
+    if(navView.nodes.length+[a,b].filter(p=>!navView.nodes.some(n=>n.id===p)).length>500) break;
+    planSet(id).add(key); changed=true;
+    for(const p of [a,b]){
+      if(!navView.nodes.some(n=>n.id===p)){
+        navView.nodes.push({id:p,type:ownedSet.has(p)?"owned":"candidate",x:navView.w/2+(Math.random()-0.5)*160,y:navView.h/2+(Math.random()-0.5)*120});
+      }
+      navView.edges.push({a:id,b:p,kind:"plan",key,node:id});
+    }
+  }
+  if(changed){ cleanupOrphans(); layoutNav(); paintNavGraph(); }
+  return changed;
+}
 
 // node popup: all plans for a clicked pal
 function openNodePop(id){
@@ -771,19 +791,12 @@ function openNodePop(id){
     el.onclick=(e)=>{ if(e.target.closest(".np-toggle")) return; togglePlan(id,a,b); openNodePop(id); };
   });
   const act=document.createElement("div"); act.className="np-actions";
-  const bAuto=document.createElement("button"); bAuto.textContent="自动导航到该帕鲁";
-  bAuto.title="自动选它的一个配种方案，把父母补进输入组，保证能导航到它";
+  const bAuto=document.createElement("button"); bAuto.textContent="自动展开该节点";
+  bAuto.title="自动把它的配种分支展开到图上（不改变目标）";
   bAuto.onclick=()=>{
-    const pairs=(state.breed[id]||[]).filter(p=>!(p[0]===id&&p[1]===id));
-    if(!pairs.length){ $("status").textContent="这只没有配种记录"; return; }
-    const own=new Set(navPick.size?navPick:state.owned);
-    const score=p=>((own.has(p[0])?2:0)+(own.has(p[1])?2:0))*1000-(dexNum(p[0])+dexNum(p[1]));
-    const best=pairs.slice().sort((a,b)=>score(b)-score(a))[0];
-    for(const p of best){ if(!own.has(p)){ navPick.add(p); own.add(p); } }
-    renderNavPick();
-    $("navTarget").value=nameOf(id); pop.hidden=true;
-    $("status").textContent=`自动导航：用 ${nameOf(best[0])} × ${nameOf(best[1])} 配 ${nameOf(id)}`;
-    $("navGo").click();
+    const ok=expandPlans(id,6);
+    openNodePop(id);
+    $("status").textContent=ok?`已展开 ${nameOf(id)} 的配种分支`:"没有更多可展开的方案";
   };
   const b1=document.createElement("button"); b1.textContent="以它为目标导航";
   b1.onclick=()=>{ $("navTarget").value=nameOf(id); pop.hidden=true; $("navGo").click(); };
