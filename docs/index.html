@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>帕鲁终端识别 · WebGPU/WebGL</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>帕鲁终端识别</h1>
+  <p class="sub">上传终端截图 → 自动按网格切格 → 分类统计数量与种类（ONNX Runtime Web，WebGPU 优先 / WebGL 回退）</p>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="toolbar">
+      <label class="file">选择截图<input type="file" id="file" accept="image/*"></label>
+      <button id="run" disabled>识别</button>
+      <span id="status">加载模型…</span>
+      <span id="backend" class="badge"></span>
+    </div>
+
+    <div class="grid-editor">
+      <div class="tabs" id="tabs">
+        <button data-g="0" class="on">盒子</button>
+        <button data-g="1">据点</button>
+        <button data-g="2">队伍</button>
+      </div>
+      <div class="sliders" id="sliders"></div>
+      <label class="chk"><input type="checkbox" id="showGrid" checked> 显示网格</label>
+    </div>
+
+    <div class="canvas-wrap"><canvas id="cv"></canvas></div>
+  </section>
+
+  <aside class="panel results">
+    <h2>统计 <span id="total" class="muted"></span></h2>
+    <ul id="list" class="pal-list"></ul>
+    <h2>未识别 / 低置信</h2>
+    <ul id="unknowns" class="pal-list small"></ul>
+  </aside>
+</main>
+
+<script src="vendor/ort.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

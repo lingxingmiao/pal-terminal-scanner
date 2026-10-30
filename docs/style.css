@@ -1,0 +1,37 @@
+:root{--bg:#0f1216;--panel:#171c22;--line:#2a323c;--fg:#e6edf3;--muted:#8b98a5;--acc:#38d47a}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{padding:14px 18px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:18px}
+.sub{margin:4px 0 0;color:var(--muted);font-size:12px}
+main{display:grid;grid-template-columns:1fr 360px;gap:14px;padding:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.file{background:#22303c;padding:7px 10px;border-radius:8px;cursor:pointer}
+.file input{display:none}
+button{background:#22303c;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{background:#2c3d4c}
+button:disabled{opacity:.45;cursor:default}
+#status{color:var(--muted);font-size:12px}
+.badge{padding:2px 8px;border-radius:999px;background:#12351f;color:var(--acc);font-size:12px;border:1px solid #1f5c34}
+.grid-editor{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:10px}
+.tabs{display:flex;gap:6px}
+.tabs button.on{background:#12351f;border-color:#1f5c34;color:var(--acc)}
+.sliders{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:6px 12px;flex:1}
+.sliders label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.sliders input[type=range]{width:100%}
+.sliders input[type=number]{width:64px;background:#0f1216;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:2px 4px}
+.chk{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.canvas-wrap{border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:72vh;background:#000}
+canvas{display:block;max-width:100%;height:auto}
+.results{max-height:86vh;overflow:auto}
+.results h2{font-size:14px;margin:6px 0 8px;color:#c9d4de}
+.muted{color:var(--muted);font-weight:400;font-size:12px}
+.pal-list{list-style:none;margin:0 0 14px;padding:0}
+.pal-list li{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px dashed #222a33}
+.pal-list img{width:30px;height:30px;border-radius:6px;background:#0b0e11;object-fit:contain}
+.pal-list .name{flex:1;font-size:12px;word-break:break-all}
+.pal-list .cnt{font-weight:700;color:var(--acc)}
+.pal-list.small li{opacity:.85}
+.pal-list.small img{width:24px;height:24px}
+@media (max-width:980px){main{grid-template-columns:1fr}}
