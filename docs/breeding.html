@@ -10,18 +10,18 @@
 <header>
   <h1>给你配了 <span class="muted">· 幻兽帕鲁自动配种工具</span></h1>
   <p class="sub">
-    上传/粘贴终端截图可识别你已有的帕鲁，配种树优先用你已有的当父母；也可以不传截图直接查。
+    上传/粘贴终端截图可识别你已有的帕鲁，方案优先用你已有的当父母；也可以不传截图直接查。
     <span class="ai">AI 编写的网页 · 帕鲁识别由 AI 模型完成</span>
   </p>
 </header>
 
 <main class="breed-main">
   <section class="panel">
-    <h2>1. 你已有的帕鲁 <span class="muted" id="ownCount"></span></h2>
+    <h2>你已有的帕鲁 <span class="muted" id="ownCount"></span></h2>
     <div id="drop" class="drop">
       <p>把终端截图拖进来，或 <b>Ctrl+V</b> 粘贴，或</p>
       <label class="file">选择截图<input type="file" id="file" accept="image/*"></label>
-      <p class="hint">识别结果只用于“优先用已有帕鲁配种”，不上传服务器（纯本地推理）。</p>
+      <p class="hint">识别只用于“优先用已有帕鲁配种”，纯本地推理。</p>
     </div>
     <div id="status" class="status">模型加载中…</div>
     <div id="chips" class="chips"></div>
@@ -29,20 +29,47 @@
   </section>
 
   <section class="panel">
-    <h2>2. 想要配出</h2>
-    <div class="controls">
-      <input id="target" list="pallist" placeholder="输入中文名或内部 ID，例如：棉悠悠 / SheepBall" autocomplete="off">
-      <datalist id="pallist"></datalist>
-      <label>层数
-        <select id="depth">
-          <option value="1">1 层（父母）</option>
-          <option value="2" selected>2 层（父母+祖父母）</option>
-          <option value="3">3 层（父母+祖父母+曾祖父母）</option>
-        </select>
-      </label>
-      <button id="gen">生成配种树</button>
+    <div class="tabs mode-tabs">
+      <button data-mode="rev" class="on">反查：目标 → 方案</button>
+      <button data-mode="fwd">正查：父母 → 子代</button>
     </div>
-    <p class="hint">绿色 ✓ 表示你已有；没有截图时按“固定组合优先”生成。</p>
+
+    <div id="revPanel">
+      <h2>想要配出</h2>
+      <div class="controls">
+        <input id="target" list="pallist" placeholder="中文名或内部 ID，例如：棉悠悠 / SheepBall" autocomplete="off">
+        <datalist id="pallist"></datalist>
+        <label>代数
+          <select id="depth">
+            <option value="1">1 代</option>
+            <option value="2" selected>2 代</option>
+            <option value="3">3 代</option>
+          </select>
+        </label>
+        <button id="gen">生成方案</button>
+      </div>
+      <div class="filters">
+        <label class="chk"><input type="checkbox" id="onlyOwned"> 只显示“父母都已有”</label>
+        <label class="chk"><input type="checkbox" id="noBoss"> 排除塔主/Boss</label>
+        <span class="hint" id="planCount"></span>
+      </div>
+      <div id="plans" class="plans"></div>
+    </div>
+
+    <div id="fwdPanel" hidden>
+      <h2>父母 → 子代</h2>
+      <div class="controls">
+        <input id="p1" list="pallist" placeholder="父母 1（中文名/ID）">
+        <span class="times">×</span>
+        <input id="p2" list="pallist" placeholder="父母 2（中文名/ID）">
+        <button id="fwdGo">查子代</button>
+      </div>
+      <p class="hint">同种必出同种；固定组合优先于公式。</p>
+      <div id="fwdOut" class="chips"></div>
+    </div>
+
+    <h2>配种树 <span class="muted" id="treeFor"></span></h2>
+    <p class="hint">绿色 ✓ 表示你已有；点击方案卡片可切换树。</p>
     <div id="tree" class="tree-wrap"><p class="hint">先选择目标帕鲁。</p></div>
   </section>
 </main>
