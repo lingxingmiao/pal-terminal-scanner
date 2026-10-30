@@ -602,7 +602,7 @@ function buildNavGraph(result,inputs,target){
 function layoutNav(){
   const {nodes,edges,w,h}=navView;
   const targetNode=nodes.find(n=>n.type==="target");
-  nodes.forEach((n,i)=>{ const a=i/nodes.length*Math.PI*2; n.x=w/2+Math.cos(a)*Math.min(w,h)*0.28; n.y=h/2+Math.sin(a)*Math.min(w,h)*0.28; });
+  nodes.forEach((n,i)=>{ const a=i/nodes.length*Math.PI*2; n.x=w/2+Math.cos(a)*Math.min(w,h)*0.34; n.y=h/2+Math.sin(a)*Math.min(w,h)*0.34; });
   if(targetNode){ targetNode.x=w/2; targetNode.y=h/2; }
   const k=Math.sqrt((w*h)/nodes.length)*0.52;
   for(let it=0;it<320;it++){
@@ -616,14 +616,30 @@ function layoutNav(){
     for(const e of edges){ const a=nodes.find(n=>n.id===e.a),b=nodes.find(n=>n.id===e.b); if(!a||!b)continue;
       let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;
       const strength = e.kind==="path" ? 0.05 : 0.006;
-      const f=(d-110)*strength;
+      const f=(d-Math.min(w,h)*0.24)*strength;
       const fx=f*dx/d, fy=f*dy/d; a.x+=fx; a.y+=fy; b.x-=fx; b.y-=fy;
     }
     for(const n of nodes){ if(n===targetNode) continue; n.x+=(w/2-n.x)*0.01; n.y+=(h/2-n.y)*0.01; n.x=Math.max(60,Math.min(w-60,n.x)); n.y=Math.max(34,Math.min(h-34,n.y)); }
     if(targetNode){ targetNode.x=w/2; targetNode.y=h/2; }
   }
 }
+function syncCanvasSize(){
+  const cv=$("navCanvas"); if(!cv) return;
+  const r=cv.getBoundingClientRect();
+  navView.w=Math.max(600,Math.round(r.width));
+  navView.h=Math.max(420,Math.round(r.height));
+}
+window.addEventListener("resize",()=>{
+  if(!$("navPanel").hidden && navView.nodes.length){
+    const ow=navView.w, oh=navView.h;
+    syncCanvasSize();
+    const sx=navView.w/ow, sy=navView.h/oh;
+    for(const n of navView.nodes){ n.x*=sx; n.y*=sy; }
+    paintNavGraph();
+  }
+});
 function drawNavGraph(result,inputs,target){
+  syncCanvasSize();
   buildNavGraph(result,inputs,target);
   paintNavGraph();
   startNavAnim();
@@ -706,7 +722,7 @@ function addPlan(id,a,b){
   const set=planSet(id);
   if(set.has(key)) return;
   const newNodes=[a,b].filter(p=>!navView.nodes.some(n=>n.id===p)).length;
-  if(navView.nodes.length+newNodes>80){
+  if(navView.nodes.length+newNodes>500){
     $("status").textContent="展开的节点太多啦，先「收起全部分支」再选";
     return;
   }
