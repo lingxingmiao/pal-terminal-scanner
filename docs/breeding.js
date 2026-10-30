@@ -212,18 +212,38 @@ function autoGrid() {
       sc /= Math.max(1, n);
       if (sc > bestScore) { bestScore = sc; bestStep = lag; }
     }
-    if (!bestStep) return null;
+    if (!bestStep || bestScore <= 0) return null;
     return { x0: foldCenter(arr, bestStep), step: bestStep };
   };
-  const cx = det(colp), cy = det(rowp);
-  if (!cx || !cy) return;
+  const runsOf = (arr) => {
+    const mx = Math.max(...arr); if (!mx) return [];
+    const thr = mx * 0.5, runs = []; let st = -1;
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i] >= thr) { if (st < 0) st = i; }
+      else if (st >= 0) { runs.push([st, i - 1]); st = -1; }
+    }
+    if (st >= 0) runs.push([st, arr.length - 1]);
+    return runs;
+  };
+  const cRuns = runsOf(colp), rRuns = runsOf(rowp);
+  if (!cRuns.length && !rRuns.length) return;
+  const runCenter = (r) => (r[0] + r[1]) / 2;
+  const runStep = (runs) => runs.length > 1 ? (runCenter(runs[runs.length - 1]) - runCenter(runs[0])) / (runs.length - 1) : 0;
+  const cx = cRuns.length > 1 ? det(colp) : null;
+  const cy = rRuns.length > 1 ? det(rowp) : null;
   const inv = 1 / state.imgScale;
+  const cols = cRuns.length || 1;
+  const rows = rRuns.length || 1;
+  const x0 = cx ? cx.x0 : runCenter(cRuns[0]);
+  const y0 = cy ? cy.x0 : runCenter(rRuns[0]);
+  const dx = cx ? cx.step : (runStep(cRuns) || w / cols);
+  const dy = cy ? cy.step : (runStep(rRuns) || h / rows);
+  const cell = cx && cy ? Math.min(cx.step, cy.step) : Math.min(dx, dy);
   state.grid = {
-    x0: (cx.x0 / s) * inv, dx: (cx.step / s) * inv,
-    y0: (cy.x0 / s) * inv, dy: (cy.step / s) * inv,
-    size: (Math.min(cx.step, cy.step) / s) * inv * 0.86,
-    cols: Math.min(12, Math.max(2, Math.round(w / cx.step))),
-    rows: Math.min(8, Math.max(2, Math.round(h / cy.step))),
+    x0: (x0 / s) * inv, dx: (dx / s) * inv,
+    y0: (y0 / s) * inv, dy: (dy / s) * inv,
+    size: (cell / s) * inv * 0.86,
+    cols: Math.min(12, cols), rows: Math.min(8, rows),
   };
 }
 async function recognizeImage(im) {
@@ -242,6 +262,22 @@ async function recognizeImage(im) {
         arr[i] = (d[i * 4] / 255 - 0.5) / 0.5;
         arr[SIZE * SIZE + i] = (d[i * 4 + 1] / 255 - 0.5) / 0.5;
         arr[2 * SIZE * SIZE + i] = (d[i * 4 + 2] / 255 - 0.5) / 0.5;
+      }
+      jobs.push(arr); cells.push([r, c]);
+    }
+    // 去红标（远征骷髅等）视图：红色像素替换为背景色
+    {
+      const cv = document.createElement("canvas"); cv.width = cv.height = SIZE;
+      const t = cv.getContext("2d"); t.imageSmoothingQuality = "high";
+      t.drawImage(im, x - size / 2, y - size / 2, size, size, 0, 0, SIZE, SIZE);
+      const d = t.getImageData(0, 0, SIZE, SIZE).data;
+      const arr = new Float32Array(3 * SIZE * SIZE);
+      for (let i = 0; i < SIZE * SIZE; i++) {
+        let rr = d[i * 4], gg = d[i * 4 + 1], bb = d[i * 4 + 2];
+        if (rr > 100 && rr - gg > 40 && rr - bb > 40) { rr = 18; gg = 22; bb = 26; }
+        arr[i] = (rr / 255 - 0.5) / 0.5;
+        arr[SIZE * SIZE + i] = (gg / 255 - 0.5) / 0.5;
+        arr[2 * SIZE * SIZE + i] = (bb / 255 - 0.5) / 0.5;
       }
       jobs.push(arr); cells.push([r, c]);
     }

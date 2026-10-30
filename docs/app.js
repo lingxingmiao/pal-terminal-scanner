@@ -150,13 +150,19 @@ function autoGrid() {
     return { x0, step, count };
   };
   const cx = det(colp, w), cy = det(rowp, h);
-  if (!cx || !cy || cx.count < 2 || cy.count < 2 || cx.step < 24 || cy.step < 24 || cx.count > 10 || cy.count > 8) {
+  if (!cx && !cy) { setStatus("自动网格失败，请手动调滑块"); return; }
+  if ((cx && (cx.count < 2 || cx.step < 24 || cx.count > 10)) || (cy && (cy.count < 2 || cy.step < 24 || cy.count > 8))) {
     setStatus("自动网格失败，请手动调滑块"); return;
   }
+  const center = (arr) => { let sum = 0, ws = 0; for (let i = 0; i < arr.length; i++) { sum += arr[i]; ws += arr[i] * i; } return sum ? ws / sum : arr.length / 2; };
   const g0 = state.grids[0];
   const inv = 1 / state.imgScale;
-  g0.x0 = (cx.x0 / s) * inv; g0.dx = (cx.step / s) * inv; g0.cols = Math.min(cx.count, 12);
-  g0.y0 = (cy.x0 / s) * inv; g0.dy = (cy.step / s) * inv; g0.rows = Math.min(cy.count, 8);
+  g0.x0 = ((cx ? cx.x0 : center(colp)) / s) * inv;
+  g0.dx = ((cx ? cx.step : (cy ? cy.step : w)) / s) * inv;
+  g0.cols = cx ? Math.min(cx.count, 12) : 1;
+  g0.y0 = ((cy ? cy.x0 : center(rowp)) / s) * inv;
+  g0.dy = ((cy ? cy.step : (cx ? cx.step : h)) / s) * inv;
+  g0.rows = cy ? Math.min(cy.count, 8) : 1;
   g0.size = Math.min(g0.dx, g0.dy) * 0.86;
   g0.on = true;
   state.grids[1].on = false; state.grids[2].on = false;
