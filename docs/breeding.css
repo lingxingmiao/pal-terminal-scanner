@@ -56,3 +56,22 @@
 .more{background:#1b232c;border:1px dashed #3a4a5a;color:var(--muted);border-radius:8px;padding:6px;cursor:pointer}
 .more:hover{color:var(--fg)}
 .times{color:var(--muted)}
+
+.explorer{margin-top:10px;max-height:72vh;overflow:auto;padding-right:6px}
+.explorer-tree{display:flex;flex-direction:column;gap:8px}
+.enode{display:flex;flex-direction:column;gap:8px}
+.card{display:flex;align-items:center;gap:8px;background:#161d25;border:1px solid #2a3642;border-radius:10px;padding:5px 9px;cursor:pointer;max-width:270px;position:relative;user-select:none}
+.card:hover{border-color:#3a4a5a}
+.card.owned{border-color:#2f7a4b;background:#12241b}
+.card.open{border-color:var(--acc);box-shadow:0 0 0 1px #1f5c34 inset}
+.card img{width:30px;height:30px;border-radius:7px;background:#0b0e11;object-fit:contain}
+.card .nm{font-size:12px;display:flex;flex-direction:column;line-height:1.2}
+.card .sub{font-size:9px;color:var(--muted)}
+.card .cnt{position:absolute;right:18px;top:4px;font-size:9px;color:var(--muted)}
+.card .arrow{position:absolute;right:6px;top:5px;font-size:10px;color:var(--muted)}
+.card .tag{font-size:9px;padding:1px 5px;border-radius:999px;border:1px solid #2a3642;color:var(--muted)}
+.card .tag.ok{color:#38d47a;border-color:#1f5c34;background:#12241b}
+.kids{margin-left:14px;border-left:2px dashed #2a3a4a;padding-left:10px;display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.plan-block{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;padding:4px 0}
+.plan-block .idx{font-size:9px;color:var(--muted);padding-top:10px;min-width:22px}
+.plan-block .x{color:var(--muted);padding-top:10px}

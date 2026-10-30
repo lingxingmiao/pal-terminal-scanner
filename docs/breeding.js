@@ -1,12 +1,12 @@
-// 给你配了 · 幻兽帕鲁自动配种工具（多方案 / 正查 / 反查 / 多代）
-const SIZE = 96, CONF_TH = 0.35, EMPTY = "__empty__", PAGE = 12;
+// 给你配了 · 幻兽帕鲁自动配种工具（可展开完整方案树 / 正查 / 反查）
+const SIZE = 96, CONF_TH = 0.35, EMPTY = "__empty__", PAGE = 10;
 const state = {
   img: null, imgScale: 1, session: null, backend: "",
   labels: null, zh: null, icons: null,
   breed: null, pairIndex: null,
   owned: new Set(), ownedConf: new Map(),
-  depth: 2, target: null, mode: "rev",
-  plans: [], planPage: 0, selected: null,
+  target: null, mode: "rev",
+  expanded: new Map(),      // id -> {page}
   grid: { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 },
 };
 const $ = (id) => document.getElementById(id);
@@ -39,14 +39,15 @@ async function init() {
       if (!state.pairIndex.has(k)) state.pairIndex.set(k, []);
       state.pairIndex.get(k).push(child);
     }
-    const dl = $("pallist");
-    dl.innerHTML = Object.keys(breed).map(id => `<option value="${nameOf(id)}">${id}</option>`).join("");
-    const def = state.breed["SheepBall"] ? "SheepBall" : Object.keys(breed)[0];
-    setTarget(def);
+    $("pallist").innerHTML = Object.keys(breed).map(id => `<option value="${nameOf(id)}">${id}</option>`).join("");
+    setTarget(state.breed["SheepBall"] ? "SheepBall" : Object.keys(breed)[0]);
     state.icons = await fetch("icons.json").then(r => r.json());
-    generatePlans();
-    const demo = new URLSearchParams(location.search).get("demo");
+    openTarget();
+    const params = new URLSearchParams(location.search);
+    const demo = params.get("demo");
     if (demo) await loadImage(demo);
+    const open = params.get("open");
+    if (open) { const id = resolveId(open); if (id) { state.expanded.set(id, { page: 0 }); renderExplorer(); } }
   } catch (e) { $("status").textContent = "初始化失败：" + e.message; }
 }
 
@@ -165,7 +166,7 @@ async function recognize() {
   }
   renderOwned();
   $("status").textContent = `识别完成：${state.owned.size} 种（${state.backend}）`;
-  if (state.target) generatePlans();
+  if (state.target) openTarget();
 }
 function renderOwned() {
   const arr = [...state.owned];
@@ -183,93 +184,84 @@ function renderOwned() {
   const top = [...rec.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
   $("recs").innerHTML = top.length ? `<h3>你现有的帕鲁可以直接配出：</h3><div class="rec-row">` +
     top.map(([id]) => `<button class="rec" data-id="${id}">${nameOf(id)}</button>`).join("") + `</div>` : "";
-  $("recs").querySelectorAll(".rec").forEach(b => b.onclick = () => { setTarget(b.dataset.id); generatePlans(); });
+  $("recs").querySelectorAll(".rec").forEach(b => b.onclick = () => { setTarget(b.dataset.id); openTarget(); });
 }
 
-// ---------------- plans ----------------
-function planScore(p) {
-  const o = (state.owned.has(p[0]) ? 0 : 1) + (state.owned.has(p[1]) ? 0 : 1);
+// ---------------- plans / explorer ----------------
+function planScore(p, id) {
+  const o = (state.owned.has(p[0]) ? 2 : 0) + (state.owned.has(p[1]) ? 2 : 0);
   const b = (isBoss(p[0]) ? 1 : 0) + (isBoss(p[1]) ? 1 : 0);
-  const t = (p[0] === state.target ? 1 : 0) + (p[1] === state.target ? 1 : 0);
-  return o * 100 + b * 10 + t * 5;
+  const t = (p[0] === id ? 1 : 0) + (p[1] === id ? 1 : 0);
+  return o * 10 - b * 3 - t * 6;
 }
-function generatePlans() {
+function plansFor(id) {
+  let pairs = (state.breed[id] || []).filter(p => !(p[0] === id && p[1] === id));
+  if ($("noBoss").checked) pairs = pairs.filter(p => !isBoss(p[0]) && !isBoss(p[1]));
+  if ($("onlyOwned").checked) pairs = pairs.filter(p => state.owned.has(p[0]) || state.owned.has(p[1]));
+  return pairs.slice().sort((a, b) => planScore(b, id) - planScore(a, id) || (a[0] + a[1]).localeCompare(b[0] + b[1]));
+}
+function openTarget() {
+  state.expanded = new Map([[state.target, { page: 0 }]]);
+  renderExplorer();
+}
+function renderExplorer() {
   if (!state.target) return;
-  const onlyOwned = $("onlyOwned").checked, noBoss = $("noBoss").checked;
-  let pairs = (state.breed[state.target] || []).filter(p => !(p[0] === state.target && p[1] === state.target));
-  if (onlyOwned) pairs = pairs.filter(p => state.owned.has(p[0]) && state.owned.has(p[1]));
-  if (noBoss) pairs = pairs.filter(p => !isBoss(p[0]) && !isBoss(p[1]));
-  pairs = pairs.slice().sort((a, b) => planScore(a) - planScore(b) || (a[0] + a[1]).localeCompare(b[0] + b[1]));
-  state.plans = pairs; state.planPage = 0; state.selected = pairs[0] || null;
-  $("planCount").textContent = `共 ${pairs.length} 种方案`;
-  $("treeFor").textContent = `目标：${nameOf(state.target)}`;
-  renderPlans();
-  renderTree();
+  const ex = $("explorer");
+  const keep = ex.scrollTop;
+  const plans = plansFor(state.target);
+  $("planCount").textContent = `「${nameOf(state.target)}」共 ${plans.length} 种直接方案（可逐层展开）`;
+  ex.innerHTML = `<div class="explorer-tree">${enodeHTML(state.target, [], "root")}</div>`;
+  ex.scrollTop = keep;
 }
-function planCard(p, idx) {
-  const icA = state.icons && state.icons[p[0]] ? `<img src="${state.icons[p[0]]}">` : "";
-  const icB = state.icons && state.icons[p[1]] ? `<img src="${state.icons[p[1]]}">` : "";
-  const own = (state.owned.has(p[0]) ? 1 : 0) + (state.owned.has(p[1]) ? 1 : 0);
-  const badge = own === 2 ? `<span class="tag ok">父母都已有</span>` : own === 1 ? `<span class="tag mid">有一个</span>` : `<span class="tag">需捕捉</span>`;
-  return `<div class="plan${state.selected === p ? " sel" : ""}" data-i="${idx}">
-    <span class="p">${icA}${nameOf(p[0])}</span><span class="x">×</span><span class="p">${icB}${nameOf(p[1])}</span>${badge}
+function cardHTML(id, chain, role) {
+  const owned = state.owned.has(id);
+  const cyc = chain.includes(id);
+  const expanded = state.expanded.has(id) && !cyc;
+  const icon = state.icons && state.icons[id] ? `<img src="${state.icons[id]}">` : "";
+  const count = plansFor(id).length;
+  const badge = owned ? `<span class="tag ok">✓ 已有</span>` : (cyc ? `<span class="tag">↺ 循环</span>` : "");
+  const cls = `card${owned ? " owned" : ""}${expanded ? " open" : ""}`;
+  const arrow = cyc ? "" : (expanded ? "▾" : "▸");
+  const cntTxt = count ? `${count}` : "需捕捉";
+  return `<div class="${cls}" data-id="${id}" data-role="${role}">
+    ${icon}<span class="nm">${nameOf(id)}<span class="sub"> ${id}</span></span>
+    ${badge}<span class="cnt">${cntTxt}</span><span class="arrow">${arrow}</span>
   </div>`;
 }
-function renderPlans() {
-  const end = (state.planPage + 1) * PAGE;
-  const list = state.plans.slice(0, end);
-  $("plans").innerHTML = list.length ? list.map((p, i) => planCard(p, i)).join("") : `<p class="hint">没有符合条件的方案。</p>`;
-  if (state.plans.length > end) {
-    $("plans").insertAdjacentHTML("beforeend", `<button id="more" class="more">加载更多（剩余 ${state.plans.length - end}）</button>`);
-    $("more").onclick = () => { state.planPage++; renderPlans(); };
+function enodeHTML(id, chain, role) {
+  const cyc = chain.includes(id);
+  const expanded = state.expanded.get(id);
+  let html = `<div class="enode">${cardHTML(id, chain, role)}`;
+  if (expanded && !cyc) {
+    const pairs = plansFor(id);
+    const end = (expanded.page + 1) * PAGE;
+    html += `<div class="kids">`;
+    if (!pairs.length) html += `<p class="hint">没有符合条件的方案。</p>`;
+    pairs.slice(0, end).forEach((p, i) => {
+      const n = chain.concat(id);
+      html += `<div class="plan-block"><span class="idx">#${i + 1}</span>${enodeHTML(p[0], n, "a")}<span class="x">×</span>${enodeHTML(p[1], n, "b")}</div>`;
+    });
+    if (pairs.length > end) html += `<button class="more" data-id="${id}">加载更多（剩余 ${pairs.length - end}）</button>`;
+    html += `</div>`;
   }
-  $("plans").querySelectorAll(".plan").forEach(el => el.onclick = () => {
-    state.selected = state.plans[+el.dataset.i];
-    renderPlans(); renderTree();
-  });
+  html += `</div>`;
+  return html;
 }
-
-// ---------------- tree ----------------
-function choosePair(child) {
-  const pairs = (state.breed[child] || []).filter(p => !(p[0] === child && p[1] === child));
-  if (!pairs.length) return null;
-  let best = null, bestScore = 1e9;
-  pairs.forEach((p, i) => {
-    const o = (state.owned.has(p[0]) ? 0 : 1) + (state.owned.has(p[1]) ? 0 : 1);
-    const b = (isBoss(p[0]) ? 1 : 0) + (isBoss(p[1]) ? 1 : 0);
-    const t = (p[0] === child ? 1 : 0) + (p[1] === child ? 1 : 0);
-    const sc = o * 10 + b * 3 + t * 2 + i * 0.01;
-    if (sc < bestScore) { bestScore = sc; best = p; }
-  });
-  return best;
-}
-function buildNode(id, depth) {
-  const node = { id, pair: null, kids: [], owned: state.owned.has(id), leaf: depth <= 0 };
-  if (depth <= 0) return node;
-  const pair = choosePair(id);
-  if (!pair) return node;
-  node.pair = pair;
-  node.kids = [buildNode(pair[0], depth - 1), buildNode(pair[1], depth - 1)];
-  return node;
-}
-function buildFromPair(child, pair, depth) {
-  const node = { id: child, pair, kids: [], owned: state.owned.has(child), leaf: depth <= 1 };
-  if (depth > 1) node.kids = [buildNode(pair[0], depth - 1), buildNode(pair[1], depth - 1)];
-  return node;
-}
-function renderTree() {
-  if (!state.selected) { $("tree").innerHTML = `<p class="hint">没有可用方案。</p>`; return; }
-  const depth = +$("depth").value;
-  const node = buildFromPair(state.target, state.selected, depth);
-  $("tree").innerHTML = `<ul class="tree-tree">${nodeHTML(node)}</ul>`;
-}
-function nodeHTML(node) {
-  const ic = state.icons && state.icons[node.id] ? `<img src="${state.icons[node.id]}">` : "";
-  const cls = node.owned ? "node owned" : (node.pair ? "node" : "node self");
-  const badge = node.owned ? `<span class="ok">✓ 已有</span>` : (node.pair || node.leaf ? "" : `<span class="warn">需要捕捉</span>`);
-  const kids = node.kids.length ? `<ul>${node.kids.map(nodeHTML).join("")}</ul>` : "";
-  return `<li><div class="${cls}">${ic}<span class="nm">${nameOf(node.id)}<span class="sub"> ${node.id}</span></span>${badge}</div>${kids}</li>`;
-}
+$("explorer").addEventListener("click", (e) => {
+  const more = e.target.closest(".more");
+  if (more) {
+    const id = more.dataset.id;
+    const cur = state.expanded.get(id) || { page: 0 };
+    state.expanded.set(id, { page: cur.page + 1 });
+    renderExplorer(); return;
+  }
+  const card = e.target.closest(".card");
+  if (!card) return;
+  const id = card.dataset.id;
+  if (state.expanded.has(id)) state.expanded.delete(id);
+  else state.expanded.set(id, { page: 0 });
+  renderExplorer();
+});
 
 // ---------------- forward lookup ----------------
 $("fwdGo").onclick = () => {
@@ -277,11 +269,11 @@ $("fwdGo").onclick = () => {
   if (!a || !b) { $("fwdOut").innerHTML = `<span class="hint">父母没识别出来。</span>`; return; }
   const k = a < b ? `${a}|${b}` : `${b}|${a}`;
   let kids = state.pairIndex.get(k) || [];
-  if (kids.length === 0) kids = [a === b ? a : "__none__"];
+  if (!kids.length) kids = [a === b ? a : "__none__"];
   $("fwdOut").innerHTML = kids.map(c => c === "__none__" ? `<span class="hint">这对父母没有记录（可能不在可配种池）。</span>` :
     `<button class="rec" data-id="${c}">${nameOf(c)}</button>`).join("");
   $("fwdOut").querySelectorAll(".rec").forEach(btn => btn.onclick = () => {
-    setTarget(btn.dataset.id); switchMode("rev"); generatePlans();
+    setTarget(btn.dataset.id); switchMode("rev"); openTarget();
   });
 };
 
@@ -294,11 +286,11 @@ const drop = $("drop");
 drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) loadImage(URL.createObjectURL(f)); });
-$("gen").onclick = () => { const id = resolveId($("target").value); if (!id) return; setTarget(id); generatePlans(); };
+$("gen").onclick = () => { const id = resolveId($("target").value); if (!id) return; setTarget(id); openTarget(); };
 $("target").addEventListener("keydown", e => { if (e.key === "Enter") $("gen").click(); });
-$("depth").addEventListener("change", renderTree);
-$("onlyOwned").addEventListener("change", generatePlans);
-$("noBoss").addEventListener("change", generatePlans);
+$("collapse").onclick = () => { state.expanded = new Map(); renderExplorer(); };
+$("onlyOwned").addEventListener("change", renderExplorer);
+$("noBoss").addEventListener("change", renderExplorer);
 function switchMode(mode) {
   state.mode = mode;
   [...document.querySelectorAll(".mode-tabs button")].forEach(b => b.classList.toggle("on", b.dataset.mode === mode));

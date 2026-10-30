@@ -10,7 +10,7 @@
 <header>
   <h1>给你配了 <span class="muted">· 幻兽帕鲁自动配种工具</span></h1>
   <p class="sub">
-    上传/粘贴终端截图可识别你已有的帕鲁，方案优先用你已有的当父母；也可以不传截图直接查。
+    上传/粘贴终端截图识别你已有的帕鲁，方案里优先显示你有的；点任意帕鲁卡片继续展开它的全部配种方式。
     <span class="ai">AI 编写的网页 · 帕鲁识别由 AI 模型完成</span>
   </p>
 </header>
@@ -21,7 +21,7 @@
     <div id="drop" class="drop">
       <p>把终端截图拖进来，或 <b>Ctrl+V</b> 粘贴，或</p>
       <label class="file">选择截图<input type="file" id="file" accept="image/*"></label>
-      <p class="hint">识别只用于“优先用已有帕鲁配种”，纯本地推理。</p>
+      <p class="hint">识别只用于“优先显示已有帕鲁”，纯本地推理。</p>
     </div>
     <div id="status" class="status">模型加载中…</div>
     <div id="chips" class="chips"></div>
@@ -30,7 +30,7 @@
 
   <section class="panel">
     <div class="tabs mode-tabs">
-      <button data-mode="rev" class="on">反查：目标 → 方案</button>
+      <button data-mode="rev" class="on">反查：目标 → 全部方案</button>
       <button data-mode="fwd">正查：父母 → 子代</button>
     </div>
 
@@ -39,21 +39,16 @@
       <div class="controls">
         <input id="target" list="pallist" placeholder="中文名或内部 ID，例如：棉悠悠 / SheepBall" autocomplete="off">
         <datalist id="pallist"></datalist>
-        <label>代数
-          <select id="depth">
-            <option value="1">1 代</option>
-            <option value="2" selected>2 代</option>
-            <option value="3">3 代</option>
-          </select>
-        </label>
-        <button id="gen">生成方案</button>
+        <button id="gen">重新展开</button>
+        <button id="collapse">全部收起</button>
       </div>
       <div class="filters">
-        <label class="chk"><input type="checkbox" id="onlyOwned"> 只显示“父母都已有”</label>
+        <label class="chk"><input type="checkbox" id="onlyOwned"> 只显示“父母里至少有一个已有”</label>
         <label class="chk"><input type="checkbox" id="noBoss"> 排除塔主/Boss</label>
         <span class="hint" id="planCount"></span>
       </div>
-      <div id="plans" class="plans"></div>
+      <p class="hint">点击绿色/灰色卡片可展开或收起它的全部父母组合；方案排序：已有父母多的优先。</p>
+      <div id="explorer" class="explorer"><p class="hint">先选择目标帕鲁。</p></div>
     </div>
 
     <div id="fwdPanel" hidden>
@@ -67,10 +62,6 @@
       <p class="hint">同种必出同种；固定组合优先于公式。</p>
       <div id="fwdOut" class="chips"></div>
     </div>
-
-    <h2>配种树 <span class="muted" id="treeFor"></span></h2>
-    <p class="hint">绿色 ✓ 表示你已有；点击方案卡片可切换树。</p>
-    <div id="tree" class="tree-wrap"><p class="hint">先选择目标帕鲁。</p></div>
   </section>
 </main>
 
