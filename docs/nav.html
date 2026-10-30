@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>配种导航原型 · No 优先</title>
+<style>
+:root{--bg:#0f1216;--panel:#171c22;--line:#2a323c;--fg:#e6edf3;--muted:#8b98a5;--acc:#38d47a}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.6 "Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg)}
+header{padding:14px 18px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:18px}
+.sub{color:var(--muted);font-size:12px;margin:4px 0 0}
+main{display:grid;grid-template-columns:360px 1fr;gap:14px;padding:14px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+label{font-size:12px;color:var(--muted);display:block;margin:8px 0 4px}
+input,textarea{width:100%;background:#0f1216;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit}
+textarea{min-height:70px;resize:vertical}
+button{background:#22303c;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;margin-top:10px}
+button:hover{background:#2c3d4c}
+.status{font-size:12px;color:var(--muted);margin-top:8px;min-height:18px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid #222a33;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+.tag{font-size:10px;padding:1px 6px;border-radius:999px;border:1px solid #2a3642;color:var(--muted)}
+.tag.ext{color:#ffb86b;border-color:#5c4a1f;background:#241f12}
+.tag.in{color:#38d47a;border-color:#1f5c34;background:#12241b}
+.mono{font-family:Consolas,monospace;font-size:11px;color:var(--muted)}
+.cands{margin-top:10px}
+.cands h3{font-size:12px;color:var(--muted);margin:10px 0 6px;font-weight:500}
+.cand{display:flex;gap:8px;align-items:center;font-size:12px;padding:3px 0;color:#c9d4de}
+.cand .no{color:var(--muted);min-width:44px}
+.summary{background:#12241b;border:1px solid #1f5c34;border-radius:8px;padding:8px 10px;font-size:12px;margin:10px 0;color:#a9f0c5}
+</style>
+</head>
+<body>
+<header>
+  <h1>配种导航原型 <span style="color:var(--muted)">· 输入帕鲁 → 输出帕鲁</span></h1>
+  <p class="sub">外部候选按图鉴 No 优先；A* 主键步数，其次外部帕鲁数量、No 总和。</p>
+</header>
+<main>
+  <section class="panel">
+    <label>输入的帕鲁（逗号/换行分隔，支持中文/拼音/No）</label>
+    <textarea id="inputs" placeholder="例：唤冬兽, 严冬鹿, 雷冠龙">唤冬兽</textarea>
+    <label>目标帕鲁</label>
+    <input id="target" value="翠羽龙">
+    <button id="go">导航</button>
+    <div class="status" id="status">加载数据…</div>
+  </section>
+  <section class="panel">
+    <div id="out"><p class="sub">输入后点导航。</p></div>
+  </section>
+</main>
+<script>
+const $=(id)=>document.getElementById(id);
+const state={breed:null,meta:null,zh:null,edges:null};
+const nameOf=(id)=>(state.zh&&state.zh[id])||id;
+function dexNum(id){const m=state.meta&&state.meta[id]&&state.meta[id].dex;const n=m&&m.match(/^(\d+)/);return n?+n[1]:9999;}
+function dexStr(id){return (state.meta&&state.meta[id]&&state.meta[id].dex)||"—";}
+
+async function load(){
+  const [breed,meta,zh]=await Promise.all([
+    fetch("breeding.json").then(r=>r.json()),
+    fetch("meta.json").then(r=>r.json()),
+    fetch("models/zh_names.json").then(r=>r.json()),
+  ]);
+  state.breed=breed; state.meta=meta; state.zh=zh;
+  state.edges={};
+  for(const [child,pairs] of Object.entries(breed)){
+    for(const [a,b] of pairs){
+      (state.edges[a]||(state.edges[a]=[])).push([child,b]);
+      (state.edges[b]||(state.edges[b]=[])).push([child,a]);
+    }
+  }
+  $("status").textContent=`数据就绪：${Object.keys(breed).length} 个帕鲁`;
+}
+
+function resolveId(text){
+  text=(text||"").trim(); if(!text) return null;
+  if(state.breed[text]) return text;
+  const low=text.toLowerCase();
+  const m=low.match(/^(?:no\.?\s*)?(\d{1,3})([a-z])?$/i);
+  if(m&&state.meta){
+    const num=+m[1],suf=(m[2]||"").toLowerCase();
+    for(const id of Object.keys(state.meta)){
+      const dm=state.meta[id].dex.toLowerCase().match(/^(\d+)([a-z]?)$/);
+      if(dm&&+dm[1]===num&&(!suf||dm[2]===suf)) return id;
+    }
+  }
+  for(const id of Object.keys(state.meta||{})){
+    const mt=state.meta[id];
+    if(mt.py===low||mt.pyi===low) return id;
+  }
+  for(const id of Object.keys(state.breed)) if(nameOf(id)===text) return id;
+  for(const id of Object.keys(state.breed)) if(id.toLowerCase()===low) return id;
+  for(const id of Object.keys(state.breed)) if(nameOf(id).includes(text)) return id;
+  return null;
+}
+
+function reverseDist(target){
+  const dist={[target]:0}; const q=[target];
+  const rev={};
+  for(const [child,pairs] of Object.entries(state.breed)){
+    for(const [a,b] of pairs){ (rev[child]||(rev[child]=[])).push(a,b); }
+  }
+  while(q.length){
+    const u=q.shift();
+    for(const p of (rev[u]||[])){
+      if(dist[p]===undefined){ dist[p]=dist[u]+1; q.push(p); }
+    }
+  }
+  return dist;
+}
+
+class Heap{
+  constructor(){this.a=[];}
+  get size(){return this.a.length;}
+  push(item,key){this.a.push({item,key});this.up(this.a.length-1);}
+  pop(){const top=this.a[0];const last=this.a.pop();if(this.a.length){this.a[0]=last;this.down(0);}return top.item;}
+  less(i,j){const a=this.a[i].key,b=this.a[j].key;for(let k=0;k<a.length;k++){if(a[k]!==b[k])return a[k]<b[k];}return false;}
+  up(i){while(i>0){const p=(i-1)>>1;if(this.less(i,p)){const t=this.a[i];this.a[i]=this.a[p];this.a[p]=t;i=p;}else break;}}
+  down(i){const n=this.a.length;while(true){let l=i*2+1,r=l+1,m=i;if(l<n&&this.less(l,m))m=l;if(r<n&&this.less(r,m))m=r;if(m===i)break;const t=this.a[i];this.a[i]=this.a[m];this.a[m]=t;i=m;}}
+}
+
+function search(inputs,target){
+  const dist=reverseDist(target);
+  const inputSet=new Set(inputs);
+  const pq=new Heap();
+  const seen=new Map(); // pal -> [steps,ext,dexsum]
+  const startStates=inputs.map(p=>({pal:p,steps:0,ext:0,dex:0,path:[]}));
+  for(const s of startStates){ pq.push(s,[s.steps+dist[s.pal],s.ext,s.dex,s.steps]); }
+  let best=null,bestKey=null,expansions=0;
+  while(pq.size&&expansions<300000){
+    const s=pq.pop(); expansions++;
+    if(s.pal===target){
+      const key=[s.steps,s.ext,s.dex];
+      if(!bestKey||key<bestKey){best=s;bestKey=key;}
+      continue;
+    }
+    if(dist[s.pal]===undefined||dist[s.pal]===0) continue;
+    if(s.steps>=8) continue;
+    const cands=(state.edges[s.pal]||[]).filter(([child,other])=>child!==s.pal);
+    // 关键：外部候选按 No 优先（在 h 相同/接近时）
+    cands.sort((x,y)=>{
+      const hx=dist[x[0]]??999, hy=dist[y[0]]??999;
+      if(hx!==hy) return hx-hy;
+      const ex=inputSet.has(x[1])?0:1, ey=inputSet.has(y[1])?0:1;
+      if(ex!==ey) return ex-ey;
+      return dexNum(x[1])-dexNum(y[1]);
+    });
+    const seenChild=new Set(); let expanded=0;
+    for(const [child,other] of cands){
+      if(expanded>=12) break;
+      if(seenChild.has(child)) continue;
+      seenChild.add(child); expanded++;
+      const extAdd=inputSet.has(other)?0:1;
+      const dexAdd=inputSet.has(other)?0:dexNum(other);
+      const ns={pal:child,steps:s.steps+1,ext:s.ext+extAdd,dex:s.dex+dexAdd,
+        path:s.path.concat([{from:s.pal,other,child,external:!inputSet.has(other)}])};
+      const prev=seen.get(child);
+      if(prev&&(prev[0]<ns.steps||(prev[0]===ns.steps&&prev[1]<ns.ext)||(prev[0]===ns.steps&&prev[1]===ns.ext&&prev[2]<=ns.dex))) continue;
+      seen.set(child,[ns.steps,ns.ext,ns.dex]);
+      const h=dist[child]??999;
+      pq.push(ns,[ns.steps+h,ns.ext,ns.dex,ns.steps]);
+    }
+  }
+  return best;
+}
+
+function render(result,inputs,target){
+  const out=$("out");
+  if(!result){out.innerHTML=`<p class="sub">没有找到路径（可能深度/图不连通）。</p>`;return;}
+  const rows=result.path.map((p,i)=>{
+    const ext=p.external?`<span class="tag ext">外部 No.${dexStr(p.other)}</span>`:`<span class="tag in">输入</span>`;
+    return `<tr><td>${i+1}</td>
+      <td>${nameOf(p.from)} <span class="mono">${p.from}</span></td>
+      <td>${nameOf(p.other)} <span class="mono">${p.other}</span><br>${ext}</td>
+      <td>${nameOf(p.child)} <span class="mono">${p.child}</span><br><span class="tag">No.${dexStr(p.child)}</span></td></tr>`;
+  }).join("");
+  const sum=`总步数 ${result.steps} · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
+  out.innerHTML=`<div class="summary">${sum}</div>
+    <table><thead><tr><th>#</th><th>当前（血统）</th><th>另一亲本</th><th>子代</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="cands"><h3>本步外部候选（按 No 优先排序，示例）</h3>
+      ${candidatePreview(result.path, inputs)}</div>`;
+}
+
+function candidatePreview(path,inputs){
+  if(!path.length) return `<p class="sub">已经在目标。</p>`;
+  const inputSet=new Set(inputs);
+  const last=path[path.length-1];
+  const cands=(state.edges[last.child]||[]).filter(([c,o])=>c!==last.child);
+  cands.sort((x,y)=>dexNum(x[1])-dexNum(y[1]));
+  return cands.slice(0,8).map(([c,o])=>`<div class="cand"><span class="no">No.${dexStr(o)}</span><span>${nameOf(o)}</span>
+    <span class="mono">+ ${nameOf(c)}</span>${inputSet.has(o)?`<span class="tag in">输入</span>`:`<span class="tag ext">外部</span>`}</div>`).join("");
+}
+
+$("go").onclick=()=>{
+  const raw=$("inputs").value.split(/[,，、\n]+/).map(s=>s.trim()).filter(Boolean);
+  const inputs=raw.map(resolveId).filter(Boolean);
+  const target=resolveId($("target").value);
+  if(!inputs.length||!target){$("status").textContent="输入或目标没识别出来";return;}
+  $("status").textContent=`导航：${inputs.map(nameOf).join(" / ")} → ${nameOf(target)}`;
+  const t0=performance.now();
+  const r=search(inputs,target);
+  const dt=Math.round(performance.now()-t0);
+  if(r) $("status").textContent=`完成，用时 ${dt} ms`;
+  render(r,inputs,target);
+};
+
+load().then(()=>{
+  const q=new URLSearchParams(location.search);
+  if(q.get("inputs")) $("inputs").value=q.get("inputs");
+  if(q.get("target")) $("target").value=q.get("target");
+  if(q.get("inputs")||q.get("target")) $("go").click();
+});
+</script>
+</body>
+</html>
