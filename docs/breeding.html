@@ -20,10 +20,11 @@
     <h2>你已有的帕鲁 <span class="muted" id="ownCount"></span></h2>
     <div id="drop" class="drop">
       <p>把终端截图拖进来，或 <b>Ctrl+V</b> 粘贴，或</p>
-      <label class="file">选择截图<input type="file" id="file" accept="image/*"></label>
-      <p class="hint">识别只用于“优先显示已有帕鲁”，纯本地推理。</p>
+      <label class="file">选择截图（可多选）<input type="file" id="file" accept="image/*" multiple></label>
+      <p class="hint">可一次选多张、多次 Ctrl+V 或批量拖入，识别结果取并集；纯本地推理。</p>
     </div>
     <div id="status" class="status">模型加载中…</div>
+    <div id="shots" class="shots"></div>
     <div id="chips" class="chips"></div>
     <div id="recs" class="recs"></div>
   </section>
@@ -44,6 +45,7 @@
       </div>
       <div class="filters">
         <label class="chk"><input type="checkbox" id="onlyOwned"> 只显示“父母里至少有一个已有”</label>
+        <label class="chk"><input type="checkbox" id="skipOwned" checked> 已有不展开（当终点）</label>
         <label class="chk"><input type="checkbox" id="noBoss"> 排除塔主/Boss</label>
         <span class="hint" id="planCount"></span>
       </div>

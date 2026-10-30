@@ -1,12 +1,14 @@
-// 给你配了 · 幻兽帕鲁自动配种工具（可展开完整方案树 / 正查 / 反查）
+// 给你配了 · 幻兽帕鲁自动配种工具（多截图 / 可展开完整方案树 / 正查 / 反查）
 const SIZE = 96, CONF_TH = 0.35, EMPTY = "__empty__", PAGE = 10;
 const state = {
-  img: null, imgScale: 1, session: null, backend: "",
+  shots: [],                 // {name, src, owned:Set, conf:Map}
+  img: null, imgScale: 1,
+  session: null, backend: "",
   labels: null, zh: null, icons: null,
   breed: null, pairIndex: null,
   owned: new Set(), ownedConf: new Map(),
   target: null, mode: "rev",
-  expanded: new Map(),      // id -> {page}
+  expanded: new Map(),
   grid: { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 },
 };
 const $ = (id) => document.getElementById(id);
@@ -44,8 +46,8 @@ async function init() {
     state.icons = await fetch("icons.json").then(r => r.json());
     openTarget();
     const params = new URLSearchParams(location.search);
-    const demo = params.get("demo");
-    if (demo) await loadImage(demo);
+    const demos = params.getAll("demo");
+    for (const d of demos) await addImage(d, d);
     const open = params.get("open");
     if (open) { const id = resolveId(open); if (id) { state.expanded.set(id, { page: 0 }); renderExplorer(); } }
   } catch (e) { $("status").textContent = "初始化失败：" + e.message; }
@@ -62,21 +64,47 @@ function resolveId(text) {
 }
 function setTarget(id) { state.target = id; $("target").value = nameOf(id); }
 
-// ---------------- recognition ----------------
-function loadImage(src) {
-  return new Promise((res, rej) => {
-    const im = new Image();
-    im.onload = () => { state.img = im; state.imgScale = im.naturalWidth / 1920; autoGrid(); recognize().then(res).catch(rej); };
-    im.onerror = rej; im.src = src;
+// ---------------- screenshots ----------------
+function loadIm(src) {
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+}
+async function addImage(src, name) {
+  const im = await loadIm(src);
+  state.img = im; state.imgScale = im.naturalWidth / 1920;
+  autoGrid();
+  $("status").textContent = `识别第 ${state.shots.length + 1} 张（${im.naturalWidth}×${im.naturalHeight}）…`;
+  const res = await recognizeImage(im);
+  state.shots.push({ name, src, owned: res.owned, conf: res.conf });
+  mergeOwned(); renderShots(); renderOwned();
+  $("status").textContent = `第 ${state.shots.length} 张识别完成：${res.owned.size} 种 · 合计 ${state.owned.size} 种（${state.backend}）`;
+  if (state.target) openTarget();
+}
+function mergeOwned() {
+  state.owned = new Set(); state.ownedConf = new Map();
+  for (const s of state.shots) for (const id of s.owned) {
+    state.owned.add(id);
+    state.ownedConf.set(id, Math.max(state.ownedConf.get(id) || 0, s.conf.get(id) || 0));
+  }
+}
+function renderShots() {
+  $("shots").innerHTML = state.shots.map((s, i) => {
+    return `<div class="shot"><img src="${s.src}"><span>${s.owned.size} 种</span><button data-i="${i}" class="rm">×</button></div>`;
+  }).join("");
+  $("shots").querySelectorAll(".rm").forEach(b => b.onclick = () => {
+    state.shots.splice(+b.dataset.i, 1);
+    mergeOwned(); renderShots(); renderOwned(); openTarget();
   });
 }
 function autoGrid() {
-  const W = state.img.naturalWidth;
-  if (W > 1200) return;
-  const s = Math.min(1, 960 / Math.max(W, state.img.naturalHeight));
-  const w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(state.img.naturalHeight * s));
+  const im = state.img, W = im.naturalWidth;
+  if (W > 1200) {
+    state.grid = { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 };
+    return;
+  }
+  const s = Math.min(1, 960 / Math.max(W, im.naturalHeight));
+  const w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(im.naturalHeight * s));
   const c = document.createElement("canvas"); c.width = w; c.height = h;
-  const g = c.getContext("2d"); g.drawImage(state.img, 0, 0, w, h);
+  const g = c.getContext("2d"); g.drawImage(im, 0, 0, w, h);
   const d = g.getImageData(0, 0, w, h).data;
   const colp = new Float32Array(w), rowp = new Float32Array(h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -122,9 +150,8 @@ function autoGrid() {
     rows: Math.min(8, Math.max(2, Math.round(h / cy.step))),
   };
 }
-async function recognize() {
-  if (!state.img || !state.session) return;
-  const g = state.grid, im = state.img, sc = state.imgScale;
+async function recognizeImage(im) {
+  const g = state.grid, sc = state.imgScale;
   const VARS = [[0, 0], [0.16, 0], [-0.16, 0], [0, 0.16], [0, -0.16]];
   const jobs = [], cells = [];
   for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
@@ -143,7 +170,6 @@ async function recognize() {
       jobs.push(arr); cells.push([r, c]);
     }
   }
-  $("status").textContent = `识别 ${g.cols}×${g.rows} 格…`;
   const n = jobs.length, data = new Float32Array(n * 3 * SIZE * SIZE);
   jobs.forEach((a, i) => data.set(a, i * 3 * SIZE * SIZE));
   const out = await state.session.run({ input: new ort.Tensor("float32", data, [n, 3, SIZE, SIZE]) });
@@ -158,15 +184,13 @@ async function recognize() {
     const cur = best.get(key);
     if (!cur || conf > cur.conf) best.set(key, { label: state.labels[bi], conf });
   }
-  state.owned = new Set(); state.ownedConf = new Map();
+  const owned = new Set(), conf = new Map();
   for (const r of best.values()) {
     if (r.label === EMPTY || r.conf < CONF_TH) continue;
-    state.owned.add(r.label);
-    state.ownedConf.set(r.label, Math.max(state.ownedConf.get(r.label) || 0, r.conf));
+    owned.add(r.label);
+    conf.set(r.label, Math.max(conf.get(r.label) || 0, r.conf));
   }
-  renderOwned();
-  $("status").textContent = `识别完成：${state.owned.size} 种（${state.backend}）`;
-  if (state.target) openTarget();
+  return { owned, conf };
 }
 function renderOwned() {
   const arr = [...state.owned];
@@ -213,24 +237,29 @@ function renderExplorer() {
   ex.innerHTML = `<div class="explorer-tree">${enodeHTML(state.target, [], "root")}</div>`;
   ex.scrollTop = keep;
 }
+function isTerminal(id, role) {
+  return $("skipOwned").checked && state.owned.has(id) && role !== "root";
+}
 function cardHTML(id, chain, role) {
   const owned = state.owned.has(id);
+  const terminal = isTerminal(id, role);
   const cyc = chain.includes(id);
-  const expanded = state.expanded.has(id) && !cyc;
+  const expanded = state.expanded.has(id) && !cyc && !terminal;
   const icon = state.icons && state.icons[id] ? `<img src="${state.icons[id]}">` : "";
   const count = plansFor(id).length;
   const badge = owned ? `<span class="tag ok">✓ 已有</span>` : (cyc ? `<span class="tag">↺ 循环</span>` : "");
-  const cls = `card${owned ? " owned" : ""}${expanded ? " open" : ""}`;
-  const arrow = cyc ? "" : (expanded ? "▾" : "▸");
-  const cntTxt = count ? `${count}` : "需捕捉";
+  const cls = `card${owned ? " owned" : ""}${expanded ? " open" : ""}${terminal ? " terminal" : ""}`;
+  const arrow = (cyc || terminal) ? "" : (expanded ? "▾" : "▸");
+  const cntShow = terminal ? "" : `<span class="cnt">${count ? count : "需捕捉"}</span>`;
   return `<div class="${cls}" data-id="${id}" data-role="${role}">
     ${icon}<span class="nm">${nameOf(id)}<span class="sub"> ${id}</span></span>
-    ${badge}<span class="cnt">${cntTxt}</span><span class="arrow">${arrow}</span>
+    ${badge}${cntShow}<span class="arrow">${arrow}</span>
   </div>`;
 }
 function enodeHTML(id, chain, role) {
   const cyc = chain.includes(id);
-  const expanded = state.expanded.get(id);
+  const terminal = isTerminal(id, role);
+  const expanded = terminal ? null : state.expanded.get(id);
   let html = `<div class="enode">${cardHTML(id, chain, role)}`;
   if (expanded && !cyc) {
     const pairs = plansFor(id);
@@ -257,6 +286,7 @@ $("explorer").addEventListener("click", (e) => {
   }
   const card = e.target.closest(".card");
   if (!card) return;
+  if (card.classList.contains("terminal")) return;
   const id = card.dataset.id;
   if (state.expanded.has(id)) state.expanded.delete(id);
   else state.expanded.set(id, { page: 0 });
@@ -278,19 +308,28 @@ $("fwdGo").onclick = () => {
 };
 
 // ---------------- events ----------------
-$("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) loadImage(URL.createObjectURL(f)); });
+async function addFiles(files) {
+  for (const f of files) {
+    if (!f || !f.type.startsWith("image/")) continue;
+    await addImage(URL.createObjectURL(f), f.name);
+  }
+}
+$("file").addEventListener("change", e => { addFiles([...e.target.files]); e.target.value = ""; });
 document.addEventListener("paste", e => {
-  for (const it of e.clipboardData.items) if (it.type.startsWith("image/")) { loadImage(URL.createObjectURL(it.getAsFile())); e.preventDefault(); break; }
+  const files = [];
+  for (const it of e.clipboardData.items) if (it.type.startsWith("image/")) files.push(it.getAsFile());
+  if (files.length) { e.preventDefault(); addFiles(files); }
 });
 const drop = $("drop");
 drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) loadImage(URL.createObjectURL(f)); });
+drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
 $("gen").onclick = () => { const id = resolveId($("target").value); if (!id) return; setTarget(id); openTarget(); };
 $("target").addEventListener("keydown", e => { if (e.key === "Enter") $("gen").click(); });
 $("collapse").onclick = () => { state.expanded = new Map(); renderExplorer(); };
 $("onlyOwned").addEventListener("change", renderExplorer);
 $("noBoss").addEventListener("change", renderExplorer);
+$("skipOwned").addEventListener("change", renderExplorer);
 function switchMode(mode) {
   state.mode = mode;
   [...document.querySelectorAll(".mode-tabs button")].forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
