@@ -7,7 +7,7 @@ const state = {
   labels: null, zh: null, icons: null,
   breed: null, pairIndex: null,
   owned: new Set(), ownedConf: new Map(),
-  target: null, mode: "rev",
+  target: null, mode: "rev", backendMode: "gpu",
   expanded: new Map(),
   grid: { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 },
 };
@@ -19,15 +19,13 @@ async function init() {
   try {
     ort.env.wasm.wasmPaths = "vendor/";
     ort.env.wasm.numThreads = 1;
-    for (const c of [
-      { m: "models/pal_classifier_fp16.onnx", ep: "webgpu", n: "FP16 · WebGPU" },
-      { m: "models/pal_classifier.onnx", ep: "webgpu", n: "FP32 · WebGPU" },
-      { m: "models/pal_classifier.onnx", ep: "webgl", n: "FP32 · WebGL" },
-      { m: "models/pal_classifier.onnx", ep: "wasm", n: "FP32 · WASM" },
-    ]) {
-      try { state.session = await ort.InferenceSession.create(c.m, { executionProviders: [c.ep] }); state.backend = c.n; break; } catch (e) {}
+    const forceCpu = new URLSearchParams(location.search).get("backend") === "cpu";
+    state.backendMode = forceCpu ? "cpu" : "gpu";
+    if (!(await createSession(state.backendMode))) {
+      state.backendMode = "cpu";
+      if (!(await createSession("cpu"))) throw new Error("推理后端初始化失败");
     }
-    if (!state.session) throw new Error("推理后端初始化失败");
+    updateBackendBtn();
     $("status").textContent = `模型就绪（${state.backend}），等待截图…`;
     const [labels, zh, breed] = await Promise.all([
       fetch("models/labels.json").then(r => r.json()),
@@ -63,6 +61,37 @@ function resolveId(text) {
   return null;
 }
 function setTarget(id) { state.target = id; $("target").value = nameOf(id); }
+
+async function createSession(mode) {
+  const cands = mode === "cpu"
+    ? [{ m: "models/pal_classifier.onnx", ep: "wasm", n: "CPU · WASM" }]
+    : [{ m: "models/pal_classifier_fp16.onnx", ep: "webgpu", n: "GPU · WebGPU FP16" },
+       { m: "models/pal_classifier.onnx", ep: "webgpu", n: "GPU · WebGPU FP32" },
+       { m: "models/pal_classifier.onnx", ep: "webgl", n: "GPU · WebGL" }];
+  for (const c of cands) {
+    try {
+      state.session = await ort.InferenceSession.create(c.m, { executionProviders: [c.ep] });
+      state.backend = c.n; return true;
+    } catch (e) { console.warn("backend failed", c.n, e); }
+  }
+  return false;
+}
+function updateBackendBtn() {
+  const b = $("backendToggle");
+  if (!b) return;
+  b.textContent = state.backendMode === "cpu" ? "推理：CPU" : "推理：GPU";
+  b.title = "当前：" + state.backend + "（点击切换 CPU/GPU）";
+}
+async function rerunShots() {
+  for (let i = 0; i < state.shots.length; i++) {
+    const im = await loadIm(state.shots[i].src);
+    state.img = im; state.imgScale = im.naturalWidth / 1920; autoGrid();
+    const res = await recognizeImage(im);
+    state.shots[i].owned = res.owned; state.shots[i].conf = res.conf;
+  }
+  mergeOwned(); renderShots(); renderOwned();
+  if (state.target) openTarget();
+}
 
 // ---------------- screenshots ----------------
 function loadIm(src) {
@@ -305,6 +334,26 @@ $("fwdGo").onclick = () => {
   $("fwdOut").querySelectorAll(".rec").forEach(btn => btn.onclick = () => {
     setTarget(btn.dataset.id); switchMode("rev"); openTarget();
   });
+};
+
+$("backendToggle").onclick = async () => {
+  const b = $("backendToggle");
+  if (b.classList.contains("busy")) return;
+  const next = state.backendMode === "gpu" ? "cpu" : "gpu";
+  b.classList.add("busy"); b.textContent = "切换中…";
+  const ok = await createSession(next);
+  if (!ok) {
+    b.classList.remove("busy"); updateBackendBtn();
+    $("status").textContent = "切换失败，继续使用 " + state.backend;
+    return;
+  }
+  state.backendMode = next; updateBackendBtn();
+  if (state.shots.length) {
+    $("status").textContent = `已切到 ${state.backend}，重新识别 ${state.shots.length} 张…`;
+    await rerunShots();
+  }
+  $("status").textContent = `推理后端：${state.backend}`;
+  b.classList.remove("busy");
 };
 
 // ---------------- events ----------------

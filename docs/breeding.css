@@ -81,3 +81,7 @@
 .shot{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--muted)}
 .shot img{width:84px;height:52px;object-fit:cover;border-radius:6px;border:1px solid #2a3642}
 .shot .rm{position:absolute;top:-6px;right:-6px;width:18px;height:18px;padding:0;border-radius:50%;background:#3a2020;border:1px solid #6a3030;color:#ffb0a0;font-size:11px;line-height:1;cursor:pointer}
+.own-head{display:flex;align-items:center;gap:8px}
+.mini{margin-left:auto;font-size:11px;padding:3px 8px;border-radius:999px;background:#132a3a;border:1px solid #1f4a63;color:#7fd1ff;cursor:pointer}
+.mini:hover{background:#173a52}
+.mini.busy{opacity:.6;cursor:default}
