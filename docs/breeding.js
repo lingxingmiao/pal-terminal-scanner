@@ -771,13 +771,26 @@ function openNodePop(id){
     el.onclick=(e)=>{ if(e.target.closest(".np-toggle")) return; togglePlan(id,a,b); openNodePop(id); };
   });
   const act=document.createElement("div"); act.className="np-actions";
+  const bAuto=document.createElement("button"); bAuto.textContent="自动导航到该帕鲁";
+  bAuto.title="自动选它的一个配种方案，把父母补进输入组，保证能导航到它";
+  bAuto.onclick=()=>{
+    const pairs=(state.breed[id]||[]).filter(p=>!(p[0]===id&&p[1]===id));
+    if(!pairs.length){ $("status").textContent="这只没有配种记录"; return; }
+    const own=new Set(navPick.size?navPick:state.owned);
+    const score=p=>((own.has(p[0])?2:0)+(own.has(p[1])?2:0))*1000-(dexNum(p[0])+dexNum(p[1]));
+    const best=pairs.slice().sort((a,b)=>score(b)-score(a))[0];
+    for(const p of best){ if(!own.has(p)){ navPick.add(p); own.add(p); } }
+    renderNavPick();
+    $("navTarget").value=nameOf(id); pop.hidden=true;
+    $("status").textContent=`自动导航：用 ${nameOf(best[0])} × ${nameOf(best[1])} 配 ${nameOf(id)}`;
+    $("navGo").click();
+  };
   const b1=document.createElement("button"); b1.textContent="以它为目标导航";
   b1.onclick=()=>{ $("navTarget").value=nameOf(id); pop.hidden=true; $("navGo").click(); };
-  act.appendChild(b1);
   const b2=document.createElement("button"); b2.textContent="加入输入组";
   b2.onclick=()=>{ navPick.add(id); renderNavPick(); };
-  act.appendChild(b2);
-  body.appendChild(act);
+  act.appendChild(bAuto); act.appendChild(b1); act.appendChild(b2);
+  body.insertBefore(act, body.firstChild);
   pop.hidden=false;
 }
 // drag + click
