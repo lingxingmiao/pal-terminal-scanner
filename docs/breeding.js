@@ -596,6 +596,7 @@ function buildNavGraph(result,inputs,target){
     for(const [ch,ot] of cands){ const cn=add(ot,"candidate"); edges.push({a:f.id,b:cn.id,kind:"cand"}); }
   }
   navView.nodes=[...nodes.values()]; navView.edges=edges;
+  navView.expandedPlans=new Map();
   layoutNav();
 }
 function layoutNav(){
@@ -687,36 +688,66 @@ function paintNavGraph(){
     ctx.fillStyle="#dfe8f0"; ctx.fillText(label,n.x-tw/2,n.y+r+16);
   }
 }
-// expand a node's breeding branches on the graph
-function expandNode(id){
-  const seenNodes=new Set(navView.nodes.map(n=>n.id));
-  const seenEdges=new Set(navView.edges.map(e=>e.a+">"+e.b));
-  const ownedSet=new Set(navPick.size?navPick:state.owned);
-  const pairs=(state.breed[id]||[]).filter(p=>!(p[0]===id&&p[1]===id)).slice(0,4);
-  let added=0;
-  for(const [a,b] of pairs){
-    for(const p of [a,b]){
-      if(!seenNodes.has(p)){
-        seenNodes.add(p); added++;
-        navView.nodes.push({id:p,type:ownedSet.has(p)?"owned":"candidate",x:navView.w/2+(Math.random()-0.5)*180,y:navView.h/2+(Math.random()-0.5)*140});
-      }
-      const key=id+">"+p;
-      if(!seenEdges.has(key)){ seenEdges.add(key); navView.edges.push({a:id,b:p,kind:"plan"}); }
-    }
-  }
-  if(added){ layoutNav(); paintNavGraph(); }
-  return added;
+// plan toggling on the graph
+function planKey(a,b){ return a<b ? a+"|"+b : b+"|"+a; }
+function planSet(id){
+  if(!navView.expandedPlans) navView.expandedPlans=new Map();
+  if(!navView.expandedPlans.has(id)) navView.expandedPlans.set(id,new Set());
+  return navView.expandedPlans.get(id);
 }
-// node popup: plans for a clicked pal
+function isPlanOpen(id,a,b){ return navView.expandedPlans && navView.expandedPlans.get(id) && navView.expandedPlans.get(id).has(planKey(a,b)); }
+function cleanupOrphans(){
+  const deg=new Map(navView.nodes.map(n=>[n.id,0]));
+  for(const e of navView.edges){ deg.set(e.a,(deg.get(e.a)||0)+1); deg.set(e.b,(deg.get(e.b)||0)+1); }
+  navView.nodes=navView.nodes.filter(n=> deg.get(n.id)>0 || n.type==="target");
+}
+function addPlan(id,a,b){
+  const key=planKey(a,b);
+  const set=planSet(id);
+  if(set.has(key)) return;
+  set.add(key);
+  const ownedSet=new Set(navPick.size?navPick:state.owned);
+  for(const p of [a,b]){
+    if(!navView.nodes.some(n=>n.id===p)){
+      navView.nodes.push({id:p,type:ownedSet.has(p)?"owned":"candidate",x:navView.w/2+(Math.random()-0.5)*160,y:navView.h/2+(Math.random()-0.5)*120});
+    }
+    navView.edges.push({a:id,b:p,kind:"plan",key,node:id});
+  }
+  layoutNav(); paintNavGraph();
+}
+function removePlan(id,a,b){
+  const key=planKey(a,b);
+  const set=planSet(id);
+  if(!set.has(key)) return;
+  set.delete(key);
+  navView.edges=navView.edges.filter(e=>!(e.kind==="plan" && e.node===id && e.key===key));
+  cleanupOrphans();
+  layoutNav(); paintNavGraph();
+}
+function togglePlan(id,a,b){ isPlanOpen(id,a,b) ? removePlan(id,a,b) : addPlan(id,a,b); }
+
+// node popup: all plans for a clicked pal
 function openNodePop(id){
   const pop=$("nodePop"), body=$("npBody");
   $("npTitle").textContent=`${nameOf(id)} (No.${dexNum(id)})`;
-  const pairs=(state.breed[id]||[]).filter(p=>!(p[0]===id&&p[1]===id)).slice(0,10);
-  const inPath = !!(navView.lastResult && navView.lastResult.path.some(s=>s.child===id));
-  body.innerHTML = pairs.map((p,i)=>`<div class="np-plan" data-i="${i}"><img src="${(state.icons&&state.icons[p[0]])||""}"><span class="nm">${nameOf(p[0])}</span><span class="dex">×</span><img src="${(state.icons&&state.icons[p[1]])||""}"><span class="nm">${nameOf(p[1])}</span></div>`).join("") || '<span class="hint">没有配种记录</span>';
-  body.querySelectorAll(".np-plan").forEach(el=>el.onclick=()=>{
+  const pairs=(state.breed[id]||[]).filter(p=>!(p[0]===id&&p[1]===id));
+  body.innerHTML = pairs.map((p,i)=>{
+    const open=isPlanOpen(id,p[0],p[1]);
+    return `<div class="np-plan" data-i="${i}">
+      <img src="${(state.icons&&state.icons[p[0]])||""}"><span class="nm">${nameOf(p[0])}</span>
+      <span class="dex">×</span>
+      <img src="${(state.icons&&state.icons[p[1]])||""}"><span class="nm">${nameOf(p[1])}</span>
+      <button class="np-toggle${open?" open":""}">${open?"收起":"展开"}</button>
+    </div>`;
+  }).join("") || '<span class="hint">没有配种记录</span>';
+  body.querySelectorAll(".np-plan").forEach(el=>{
     const [a,b]=pairs[+el.dataset.i];
-    expandNode(id);
+    el.querySelector(".np-toggle").onclick=(e)=>{
+      e.stopPropagation();
+      togglePlan(id,a,b);
+      openNodePop(id);
+    };
+    el.onclick=(e)=>{ if(e.target.closest(".np-toggle")) return; togglePlan(id,a,b); openNodePop(id); };
   });
   const act=document.createElement("div"); act.className="np-actions";
   const b1=document.createElement("button"); b1.textContent="以它为目标导航";
@@ -727,21 +758,6 @@ function openNodePop(id){
   act.appendChild(b2);
   body.appendChild(act);
   pop.hidden=false;
-}
-function applyPlan(nodeId,a,b){
-  const r=navView.lastResult; if(!r) return;
-  const s=r.path.find(x=>x.child===nodeId); if(!s) return;
-  const from=s.from;
-  s.other = (a===from?b:(b===from?a:a));
-  if(s.other===from){ s.other=b===from?a:b; }
-  const picked=new Set(navPick.size?navPick:state.owned);
-  s.external=!picked.has(s.other);
-  s.p=1; s.stepCost=1;
-  let cost=0, ext=0, dex=0;
-  for(const st of r.path){ cost+=st.stepCost||1; if(st.external){ ext++; dex+=dexNum(st.other); } }
-  r.cost=cost; r.ext=ext; r.dex=dex; r.steps=r.path.length;
-  renderNav(r,r._inputs,r._target);
-  $("nodePop").hidden=true;
 }
 // drag + click
 (function(){
@@ -761,7 +777,7 @@ function applyPlan(nodeId,a,b){
     const p=toCanvas(e); navView.drag.x=p.x; navView.drag.y=p.y; paintNavGraph();
   });
   window.addEventListener("mouseup",()=>{
-    if(!moved && downNode){ openNodePop(downNode.id); expandNode(downNode.id); }
+    if(!moved && downNode){ openNodePop(downNode.id); }
     navView.drag=null; downAt=null; downNode=null; cv.style.cursor="grab";
   });
   $("npClose").onclick=()=>{ $("nodePop").hidden=true; };
