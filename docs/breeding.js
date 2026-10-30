@@ -613,7 +613,9 @@ function layoutNav(){
       a.x-=fx; a.y-=fy; b.x+=fx; b.y+=fy;
     }
     for(const e of edges){ const a=nodes.find(n=>n.id===e.a),b=nodes.find(n=>n.id===e.b); if(!a||!b)continue;
-      let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1; const f=(d-110)*0.03;
+      let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+      const strength = e.kind==="path" ? 0.05 : 0.006;
+      const f=(d-110)*strength;
       const fx=f*dx/d, fy=f*dy/d; a.x+=fx; a.y+=fy; b.x-=fx; b.y-=fy;
     }
     for(const n of nodes){ if(n===targetNode) continue; n.x+=(w/2-n.x)*0.01; n.y+=(h/2-n.y)*0.01; n.x=Math.max(60,Math.min(w-60,n.x)); n.y=Math.max(34,Math.min(h-34,n.y)); }
@@ -623,6 +625,16 @@ function layoutNav(){
 function drawNavGraph(result,inputs,target){
   buildNavGraph(result,inputs,target);
   paintNavGraph();
+  startNavAnim();
+}
+function startNavAnim(){
+  if(navView.raf) return;
+  const loop=()=>{
+    navView.t=((navView.t||0)+0.6)%100000;
+    if(!$("navPanel").hidden && navView.nodes.length) paintNavGraph();
+    navView.raf=requestAnimationFrame(loop);
+  };
+  navView.raf=requestAnimationFrame(loop);
 }
 function paintNavGraph(){
   const cv=$("navCanvas"), ctx=cv.getContext("2d"), dpr=window.devicePixelRatio||1;
@@ -630,13 +642,24 @@ function paintNavGraph(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const pos=new Map(navView.nodes.map(n=>[n.id,n]));
   ctx.clearRect(0,0,navView.w,navView.h);
-  // edges
+  // edges (curved + animated flow on the path)
   for(const e of navView.edges){
     const a=pos.get(e.a),b=pos.get(e.b); if(!a||!b)continue;
-    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-    if(e.kind==="path"){ ctx.strokeStyle="rgba(255,138,122,.85)"; ctx.lineWidth=2; }
-    else { ctx.strokeStyle="rgba(60,80,100,.55)"; ctx.lineWidth=1; ctx.setLineDash([4,4]); }
-    ctx.stroke(); ctx.setLineDash([]);
+    const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1;
+    const nx=-dy/len, ny=dx/len;
+    const bend = e.kind==="path" ? 16 : 9;
+    const mx=(a.x+b.x)/2+nx*bend, my=(a.y+b.y)/2+ny*bend;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.quadraticCurveTo(mx,my,b.x,b.y);
+    if(e.kind==="path"){
+      ctx.strokeStyle="rgba(255,138,122,.9)"; ctx.lineWidth=2;
+      ctx.setLineDash([8,8]); ctx.lineDashOffset=-(navView.t||0);
+      ctx.stroke(); ctx.setLineDash([]);
+      const t=((navView.t||0)/26)%1;
+      const q={x:(1-t)*(1-t)*a.x+2*(1-t)*t*mx+t*t*b.x, y:(1-t)*(1-t)*a.y+2*(1-t)*t*my+t*t*b.y};
+      ctx.beginPath(); ctx.arc(q.x,q.y,3,0,Math.PI*2); ctx.fillStyle="#ffd9cf"; ctx.fill();
+    } else {
+      ctx.strokeStyle="rgba(60,80,100,.5)"; ctx.lineWidth=1; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+    }
   }
   // nodes (round thumbnails)
   for(const n of navView.nodes){
