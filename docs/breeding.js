@@ -950,7 +950,7 @@ async function detectAll(img){
   const minSide=Math.min(cw,ch);
   let sizes;
   if(minSide<300) sizes=[Math.round(minSide*0.6),Math.round(minSide*0.8)];
-  else sizes=[64,96,128,160].filter(s=>s<=minSide*0.95);
+  else sizes=[64,96,128,160,192,224,256].filter(s=>s<=minSide*0.95);
   const cands=[];
   for(const size of sizes){
     const stride=Math.max(10,Math.round(size*0.6));
