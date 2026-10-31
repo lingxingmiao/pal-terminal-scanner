@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>给你配了 - 幻兽帕鲁自动配种工具</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="breeding.css?v=20261031t">
+<link rel="stylesheet" href="breeding.css?v=20261031u">
 </head>
 <body>
 <header>
@@ -64,9 +64,11 @@
       <h2>导航：输入帕鲁 → 目标</h2>
       <div class="controls">
         <span id="navOwnedInfo" class="hint">输入 = 左侧「你已有的帕鲁」</span>
-        <input id="navTarget" list="pallist" placeholder="目标帕鲁（可多个，逗号分隔）">
+        <input id="navTarget" list="pallist" placeholder="目标帕鲁（输入后点添加）">
+        <button id="navAdd" class="mini">添加</button>
         <button id="navGo">导航</button>
       </div>
+      <div id="navTargets" class="nav-targets"></div>
       <div class="nav-group">
         <div class="group-head">
           <span class="group-title">输入分组</span>
@@ -121,6 +123,6 @@
 
 <script src="vendor/ort.min.js"></script>
 <div id="workPop" class="work-pop" hidden></div>
-<script src="breeding.js?v=20261031t"></script>
+<script src="breeding.js?v=20261031u"></script>
 </body>
 </html>

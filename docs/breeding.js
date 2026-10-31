@@ -49,6 +49,7 @@ async function init() {
     state.icons = await fetch("icons.json").then(r => r.json());
     renderGroupCards();
     renderNavPick();
+    renderNavTargets();
     openTarget();
     const params = new URLSearchParams(location.search);
     const demos = params.getAll("demo");
@@ -63,6 +64,7 @@ async function init() {
     if(params.get("detect")) setTimeout(()=>$("detectBtn").click(),700);
     if(params.get("mode")==="nav"){
       switchMode("nav");
+      if(params.get("navTargets")){ for(const t of params.get("navTargets").split(",")){ const id=resolveId(t); if(id) navTargets.push(id); } renderNavTargets(); setTimeout(()=>$("navGo").click(),300); }
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
       if(params.get("navTarget")) $("navGo").click();
       if(params.get("pop")){ const pid=resolveId(params.get("pop")); if(pid) setTimeout(()=>openNodePop(pid),400); }
@@ -1068,6 +1070,7 @@ function showWorkPop(input,type){
   p.innerHTML=rows.map(([id,w])=>`<div class="wp-row" data-id="${id}"><img src="${(state.icons&&state.icons[id])||""}"><span class="wp-name">${nameOf(id)}</span><span class="wp-lv">Lv.${w[type]}</span></div>`).join("")||'<div class="hint">没有结果</div>';
   p.querySelectorAll(".wp-row").forEach(el=>el.onclick=()=>{
     const id=el.dataset.id;
+    if(input.id==="navTarget"){ addNavTarget(id); return; }
     input.value=nameOf(id);
     closeWorkPop();
     if(input.id==="target"){ setTarget(id); switchMode("rev"); openTarget(); }
@@ -1109,8 +1112,9 @@ drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
 $("navGo").onclick = () => {
   const inputs = navPick.size ? [...navPick] : [...state.owned];
-  const raw=$("navTarget").value.split(/[,，、\n]+/).map(s=>s.trim()).filter(Boolean);
-  const targets=raw.map(resolveId).filter(Boolean);
+  const typed=resolveId($("navTarget").value);
+  const targets=[...navTargets];
+  if(typed&&!targets.includes(typed)) targets.push(typed);
   if(!inputs.length){$("status").textContent="导航：先在左侧截图识别或手动添加帕鲁";return;}
   if(!targets.length){$("status").textContent="导航：目标没识别出来";return;}
   if(targets.length>1){
@@ -1127,6 +1131,25 @@ $("navGo").onclick = () => {
   if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
   renderNav(r,inputs,target);
 };
+const navTargets=[];
+function renderNavTargets(){
+  const el=$("navTargets"); if(!el) return;
+  el.innerHTML=navTargets.map(id=>`<span class="nt"><img src="${(state.icons&&state.icons[id])||""}">${nameOf(id)}<button data-id="${id}">×</button></span>`).join("");
+  el.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    const i=navTargets.indexOf(b.dataset.id);
+    if(i>=0) navTargets.splice(i,1);
+    renderNavTargets();
+  });
+}
+function addNavTarget(id){
+  if(!id) return;
+  if(!navTargets.includes(id)) navTargets.push(id);
+  $("navTarget").value="";
+  renderNavTargets();
+  closeWorkPop();
+}
+$("navAdd").onclick=()=>{ addNavTarget(resolveId($("navTarget").value)); };
+$("navTarget").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNavTarget(resolveId($("navTarget").value)); } });
 function navSearchMulti(inputs,targets){
   const items=[];
   for(const t of targets){ const r=navSearch(inputs,t,null); if(r) items.push({target:t,result:r}); }
