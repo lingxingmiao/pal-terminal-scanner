@@ -972,7 +972,7 @@ async function detectAll(img){
       for(let k=1;k<300;k++) if(logits[off+k]>logits[off+bi]) bi=k;
       let sum=0; for(let k=0;k<300;k++) sum+=Math.exp(logits[off+k]-logits[off+bi]);
       const conf=1/sum, label=state.labels[bi];
-      if(label!=="__empty__"&&conf>0.55) results.push({...batch[j],label,conf});
+      if(label!=="__empty__"&&conf>0.5) results.push({...batch[j],label,conf});
     }
   }
   results.sort((a,b)=>b.conf-a.conf);
