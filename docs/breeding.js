@@ -529,14 +529,14 @@ function navSearch(inputs,target,passiveId,planned,groups){
     const m0=groupOf.has(p)?1<<groupOf.get(p):0;
     pq.push({pal:p,carry:!!passiveId,mask:m0,cost:0,prob:1,ext:0,dex:0,steps:0,path:[]},[0,0,0,0]);
   }
-  while(pq.size&&exp<30000){
+  while(pq.size&&exp<50000){
     const s=pq.pop(); exp++;
     if(s.pal===target&&(!passiveId||s.carry)&&(!fullMask||s.mask===fullMask)){
       const key=[s.cost,s.ext,s.dex,s.steps];
       if(!bestKey||key<bestKey){bestKey=key;bestResult=s;}
       continue;
     }
-    if(s.steps>=6) continue;
+    if(s.steps>=8) continue;
     const cands=(edges[s.pal]||[]).filter(([child,other])=>child!==s.pal);
     cands.sort((x,y)=>{
       const hx=dist[x[0]]??999, hy=dist[y[0]]??999;
@@ -547,7 +547,7 @@ function navSearch(inputs,target,passiveId,planned,groups){
     });
     const seenChild=new Set(); let expanded=0;
     for(const [child,other] of cands){
-      if(expanded>=8) break;
+      if(expanded>=12) break;
       if(seenChild.has(child)) continue;
       seenChild.add(child); expanded++;
       const otherIn=inputSet.has(other);
@@ -1233,9 +1233,9 @@ function navSearchMulti(inputs,targets,passiveId,groups,allGroups){
   for(const t of targets){
     const base=inputs.filter(x=>x!==t);
     let r=navSearch(base.length?base:inputs,t,passiveId,planned,groups);
-    if(!r&&groups) r=navSearch(base.length?base:inputs,t,passiveId,planned,null);
-    if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t)}); for(const st of r.path) planned.add(st.child); }
-    else items.push({target:t,done:true});
+    if(!r&&groups&&inputSet.has(t)) r=navSearch(base.length?base:inputs,t,passiveId,planned,null);
+    if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t),fallback:false}); for(const st of r.path) planned.add(st.child); }
+    else items.push({target:t,done:inputSet.has(t),blocked:!!groups});
   }
   const seen=new Map(), steps=[];
   for(const {target,result} of items){ if(!result) continue; for(const s of result.path){
@@ -1299,8 +1299,9 @@ function renderNavMulti(m,inputs){
     const names=gl.filter((_,gi)=>mask&(1<<gi)).map(g=>g.name);
     return `<tr><td>${i+1}</td><td>${nameOf(st.from)} + ${nameOf(st.other)}</td><td>${nameOf(st.child)}</td><td>${users}</td><td>${names.length?names.join("、"):"—"}</td></tr>`;
   }).join("");
-  const doneTargets=m.items.filter(x=>!x.result).map(x=>nameOf(x.target));
-  $("navTable").innerHTML=`<table><thead><tr><th>步骤</th><th>父母</th><th>子代</th><th>服务于目标</th><th>子代累计词条</th></tr></thead><tbody>${rows}</tbody></table>${doneTargets.length?`<p class="hint">已拥有无需配种：${doneTargets.join("、")}</p>`:""}`;
+  const blockedTargets=m.items.filter(x=>!x.result&&x.blocked).map(x=>nameOf(x.target));
+  const doneTargets=m.items.filter(x=>!x.result&&!x.blocked).map(x=>nameOf(x.target));
+  $("navTable").innerHTML=`<table><thead><tr><th>步骤</th><th>父母</th><th>子代</th><th>服务于目标</th><th>子代累计词条</th></tr></thead><tbody>${rows}</tbody></table>${doneTargets.length?`<p class="hint">已拥有无需配种：${doneTargets.join("、")}</p>`:""}${blockedTargets.length?`<p class="hint">无法同时覆盖所有分组（已超出搜索深度）：${blockedTargets.join("、")}</p>`:""}`;
   syncCanvasSize();
   buildNavGraphMulti(m,inputs);
   paintNavGraph();
