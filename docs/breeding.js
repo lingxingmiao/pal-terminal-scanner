@@ -551,17 +551,15 @@ function navSearch(inputs,target,passiveId,planned,groups){
       if(seenChild.has(child)) continue;
       seenChild.add(child); expanded++;
       const otherIn=inputSet.has(other);
-      const otherCarry=!!passiveId&&otherIn;
-      let p=0;
-      if(passiveId){
-        if(s.carry&&otherCarry) p=0.75;
-        else if(s.carry||otherCarry) p=0.5;
-      }
-      let stepCost=passiveId?(p>0?1/p:0):1;
+      const otherGroup=groupOf.has(other)?1<<groupOf.get(other):0;
+      const mask=(s.mask||0)|otherGroup;
+      const pc=(x)=>{let c=0;while(x){c+=x&1;x>>=1;}return c;};
+      const n=pc(mask);
+      let p=n===0?1:(n<=4?[0,0.4,0.3,0.2,0.1][n]:0);
+      if(p<=0) continue;
+      let stepCost=1/p;
       if(planned&&planned.has(child)) stepCost=0;
-      let mask=s.mask||0;
-      if(groupOf.has(other)) mask|=1<<groupOf.get(other);
-      if(groupOf.has(child)) mask|=1<<groupOf.get(child);
+      const otherCarry=n>0;
       const ns={pal:child,carry:s.carry||otherCarry,mask,cost:s.cost+stepCost,
         prob:s.prob*(passiveId?p:1),ext:s.ext+(otherIn?0:1),
         dex:s.dex+(otherIn?0:dexNum(other)),steps:s.steps+1,
