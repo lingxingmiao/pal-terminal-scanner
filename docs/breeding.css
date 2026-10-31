@@ -175,3 +175,9 @@
 .wp-row img{width:22px;height:22px;border-radius:50%;object-fit:contain}
 .wp-name{flex:1}
 .wp-lv{color:#7fd1ff;font-size:11px}
+
+.detect-canvas{width:100%;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:#0b0e11}
+.detect-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:150px;overflow:auto}
+.detect-list .dl{display:flex;align-items:center;gap:5px;font-size:11px;border:1px solid var(--line);border-radius:999px;padding:2px 8px 2px 3px;background:#0f1216;cursor:pointer;color:#c9d4de}
+.detect-list .dl img{width:20px;height:20px;border-radius:50%;object-fit:contain}
+.detect-list .dl .cf{color:#7fd1ff}

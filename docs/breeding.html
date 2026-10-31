@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>给你配了 - 幻兽帕鲁自动配种工具</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="breeding.css?v=20261031o">
+<link rel="stylesheet" href="breeding.css?v=20261031p">
 </head>
 <body>
 <header>
@@ -24,6 +24,9 @@
       <p class="hint">可一次选多张、多次 Ctrl+V 或批量拖入，识别结果取并集；纯本地推理。</p>
     </div>
     <div id="status" class="status">模型加载中…</div>
+    <button id="detectBtn" class="mini" style="margin-top:8px">自动检测（任意截图，画框标注）</button>
+    <canvas id="detectCanvas" class="detect-canvas" hidden></canvas>
+    <div id="detectList" class="detect-list"></div>
     <div id="shots" class="shots"></div>
     <div class="own-add"><input id="ownInput" list="pallist" placeholder="手动添加：中文 / 拼音 / 编号"><button id="ownAdd">添加</button></div>
     <div id="chips" class="chips"></div>
@@ -118,6 +121,6 @@
 
 <script src="vendor/ort.min.js"></script>
 <div id="workPop" class="work-pop" hidden></div>
-<script src="breeding.js?v=20261031o"></script>
+<script src="breeding.js?v=20261031p"></script>
 </body>
 </html>

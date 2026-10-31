@@ -60,6 +60,7 @@ async function init() {
       mergeOwned(); renderOwned();
     }
     if(params.get("wq")){ $("target").value=params.get("wq"); $("target").dispatchEvent(new Event("input")); }
+    if(params.get("detect")) setTimeout(()=>$("detectBtn").click(),700);
     if(params.get("mode")==="nav"){
       switchMode("nav");
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
@@ -160,6 +161,7 @@ async function addImage(src, name) {
   autoGrid();
   $("status").textContent = `识别第 ${state.shots.length + 1} 张（${im.naturalWidth}×${im.naturalHeight}）…`;
   const res = await recognizeImage(im);
+  state.lastImg = im;
   state.shots.push({ name, src, owned: res.owned, conf: res.conf });
   mergeOwned(); renderShots(); renderOwned();
   $("status").textContent = `第 ${state.shots.length} 张识别完成：${res.owned.size} 种 · 合计 ${state.owned.size} 种（${state.backend}）`;
@@ -911,6 +913,132 @@ $("navCollapse").onclick=()=>{
   drawNavGraph(r,r._inputs,r._target);
   $("nodePop").hidden=true;
   $("status").textContent="已收起所有展开分支";
+};
+
+// ---------------- arbitrary screenshot detection ----------------
+function regionActive(data,cw,x,y,size){
+  let n=0,sum=0,sum2=0;
+  const step=Math.max(2,Math.floor(size/8));
+  for(let yy=y;yy<y+size;yy+=step)for(let xx=x;xx<x+size;xx+=step){
+    const i=(yy*cw+xx)*4; const v=(data[i]+data[i+1]+data[i+2])/3;
+    sum+=v; sum2+=v*v; n++;
+  }
+  const mean=sum/n, va=sum2/n-mean*mean;
+  return mean>28 && va>120;
+}
+function cropTensorFrom(cv,x,y,size){
+  const t=document.createElement("canvas"); t.width=t.height=SIZE;
+  const g=t.getContext("2d"); g.imageSmoothingQuality="high";
+  g.drawImage(cv,x,y,size,size,0,0,SIZE,SIZE);
+  const d=g.getImageData(0,0,SIZE,SIZE).data;
+  const arr=new Float32Array(3*SIZE*SIZE);
+  for(let i=0;i<SIZE*SIZE;i++){arr[i]=(d[i*4]/255-.5)/.5;arr[SIZE*SIZE+i]=(d[i*4+1]/255-.5)/.5;arr[2*SIZE*SIZE+i]=(d[i*4+2]/255-.5)/.5;}
+  return arr;
+}
+function iou(a,b){
+  const x1=Math.max(a.x,b.x),y1=Math.max(a.y,b.y),x2=Math.min(a.x+a.size,b.x+b.size),y2=Math.min(a.y+a.size,b.y+b.size);
+  const w=Math.max(0,x2-x1),h=Math.max(0,y2-y1),inter=w*h;
+  return inter/(a.size*a.size+b.size*b.size-inter||1);
+}
+async function detectAll(img){
+  const W=img.naturalWidth,H=img.naturalHeight;
+  const scale=Math.min(1,1500/Math.max(W,H));
+  const cw=Math.round(W*scale),ch=Math.round(H*scale);
+  const cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+  const g=cv.getContext("2d"); g.drawImage(img,0,0,cw,ch);
+  const data=g.getImageData(0,0,cw,ch).data;
+  const minSide=Math.min(cw,ch);
+  let sizes;
+  if(minSide<300) sizes=[Math.round(minSide*0.6),Math.round(minSide*0.8)];
+  else sizes=[64,96,128,160].filter(s=>s<=minSide*0.95);
+  const cands=[];
+  for(const size of sizes){
+    const stride=Math.max(10,Math.round(size*0.6));
+    for(let y=0;y+size<=ch;y+=stride)for(let x=0;x+size<=cw;x+=stride){
+      if(regionActive(data,cw,x,y,size)) cands.push({x,y,size});
+    }
+    if(cands.length>4000) break;
+  }
+  const results=[]; const BATCH=64;
+  for(let i=0;i<cands.length;i+=BATCH){
+    const batch=cands.slice(i,i+BATCH);
+    const arrs=batch.map(c=>cropTensorFrom(cv,c.x,c.y,c.size));
+    const n=arrs.length, inp=new Float32Array(n*3*SIZE*SIZE);
+    arrs.forEach((a,j)=>inp.set(a,j*3*SIZE*SIZE));
+    const out=await state.session.run({input:new ort.Tensor("float32",inp,[n,3,SIZE,SIZE])});
+    const logits=out.logits.data;
+    for(let j=0;j<n;j++){
+      let bi=0,off=j*300;
+      for(let k=1;k<300;k++) if(logits[off+k]>logits[off+bi]) bi=k;
+      let sum=0; for(let k=0;k<300;k++) sum+=Math.exp(logits[off+k]-logits[off+bi]);
+      const conf=1/sum, label=state.labels[bi];
+      if(label!=="__empty__"&&conf>0.55) results.push({...batch[j],label,conf});
+    }
+  }
+  results.sort((a,b)=>b.conf-a.conf);
+  const kept=[];
+  for(const r of results){
+    const cx=r.x+r.size/2, cy=r.y+r.size/2;
+    const dup=kept.some(k=>{
+      const kx=k.x+k.size/2, ky=k.y+k.size/2;
+      const d=Math.hypot(cx-kx,cy-ky);
+      const same=k.label===r.label;
+      return d < (same?1.0:0.5)*Math.max(r.size,k.size);
+    });
+    if(!dup) kept.push(r);
+    if(kept.length>=60) break;
+  }
+  // refine each box: search nearby centers for the highest confidence
+  const offs=[-0.24,-0.12,0,0.12,0.24];
+  const jobs=[], meta=[];
+  for(const k of kept) for(const ox of offs) for(const oy of offs){
+    const x=Math.round(k.x+ox*k.size), y=Math.round(k.y+oy*k.size);
+    if(x<0||y<0||x+k.size>cv.width||y+k.size>cv.height) continue;
+    jobs.push(cropTensorFrom(cv,x,y,k.size)); meta.push({k,x,y});
+  }
+  for(let i=0;i<jobs.length;i+=BATCH){
+    const batch=jobs.slice(i,i+BATCH);
+    const n=batch.length, inp=new Float32Array(n*3*SIZE*SIZE);
+    batch.forEach((a,j)=>inp.set(a,j*3*SIZE*SIZE));
+    const out=await state.session.run({input:new ort.Tensor("float32",inp,[n,3,SIZE,SIZE])});
+    const logits=out.logits.data;
+    for(let j=0;j<n;j++){
+      let bi=0,off=j*300;
+      for(let k2=1;k2<300;k2++) if(logits[off+k2]>logits[off+bi]) bi=k2;
+      let sum=0; for(let k2=0;k2<300;k2++) sum+=Math.exp(logits[off+k2]-logits[off+bi]);
+      const conf=1/sum, label=state.labels[bi];
+      const m=meta[i+j]; if(!m) continue;
+      if(label!=="__empty__" && conf>m.k.conf){ m.k.conf=conf; m.k.label=label; m.k.x=m.x; m.k.y=m.y; }
+    }
+  }
+  kept.sort((a,b)=>b.conf-a.conf);
+  return {cv,scale,kept};
+}
+function drawDetections(det){
+  const {cv,scale,kept}=det;
+  const out=$("detectCanvas");
+  out.hidden=false; out.width=cv.width; out.height=cv.height;
+  const g=out.getContext("2d"); g.drawImage(cv,0,0);
+  g.lineWidth=2; g.font="12px 'Microsoft YaHei',sans-serif";
+  for(const k of kept){
+    const x=k.x/k.size, y=k.y/k.size;
+    g.strokeStyle="#38d47a"; g.strokeRect(k.x,k.y,k.size,k.size);
+    const label=`${nameOf(k.label)} ${(k.conf*100).toFixed(0)}%`;
+    const tw=g.measureText(label).width;
+    g.fillStyle="rgba(8,12,10,.8)"; g.fillRect(k.x,k.y-18,tw+8,16);
+    g.fillStyle="#a9f0c5"; g.fillText(label,k.x+4,k.y-6);
+  }
+  $("detectList").innerHTML=kept.map((k,i)=>`<span class="dl" data-id="${k.label}"><img src="${(state.icons&&state.icons[k.label])||""}">${nameOf(k.label)} <span class="cf">${(k.conf*100).toFixed(0)}%</span></span>`).join("")||'<span class="hint">没有检测到帕鲁</span>';
+  $("detectList").querySelectorAll(".dl").forEach(el=>el.onclick=()=>{ state.manualAdd.add(el.dataset.id); state.manualRemove.delete(el.dataset.id); mergeOwned(); renderOwned(); });
+}
+$("detectBtn").onclick=async()=>{
+  if(!state.lastImg){ $("status").textContent="先上传一张截图"; return; }
+  $("status").textContent="自动检测中（多尺度滑窗）…";
+  try{
+    const det=await detectAll(state.lastImg);
+    drawDetections(det);
+    $("status").textContent=`自动检测完成：${det.kept.length} 个`;
+  }catch(e){ $("status").textContent="自动检测失败："+e.message; }
 };
 
 // ---------------- work suitability search (in target inputs) ----------------
