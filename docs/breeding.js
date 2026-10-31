@@ -1240,6 +1240,7 @@ function buildNavGraphMulti(m,inputs){
   const add=(id,type)=>{ if(!nodes.has(id)) nodes.set(id,{id,type,x:0,y:0}); const n=nodes.get(id); if(type==="target") n.type="target"; else if(n.type!=="target") n.type=type; return n; };
   for(const {target,result} of m.items){
     add(target,"target");
+    if(!result) continue;
     for(const p of result.path){
       const f=add(p.from,inputSet.has(p.from)?"owned":"external");
       const o=add(p.other,p.external?"external":"owned");
