@@ -75,6 +75,7 @@ async function init() {
         if(params.get("reqgrp")) $("navAllGroups").checked=true;
       }
       if(params.get("navTargets")){ for(const t of params.get("navTargets").split(",")){ const id=resolveId(t); if(id) navTargets.push(id); } renderNavTargets(); setTimeout(()=>$("navGo").click(),300); }
+      if(params.get("brute")) $("navBrute").checked=true;
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
       if(params.get("navTarget")) $("navGo").click();
       if(params.get("pop")){ const pid=resolveId(params.get("pop")); if(pid) setTimeout(()=>openNodePop(pid),400); }
@@ -1173,6 +1174,7 @@ $("navGo").onclick = async () => {
   const inputs = navPick.size ? [...navPick] : [...state.owned];
   let passiveId=null, passiveName="";
   const allGroups=navGroups.filter(g=>g.ids&&g.ids.length).map(g=>new Set(g.ids));
+  const brute=$("navBrute").checked;
   const reqGroups=$("navAllGroups").checked ? allGroups : null;
   if(navGroupIdx>=0 && navGroups[navGroupIdx]){
     const gname=navGroups[navGroupIdx].name;
@@ -1191,7 +1193,7 @@ $("navGo").onclick = async () => {
   const t0=performance.now();
   if(targets.length>1){
     $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${targets.length} 个目标`;
-    const m=navSearchMulti(inputs,targets,passiveId,reqGroups,allGroups);
+    const m=navSearchMulti(inputs,targets,passiveId,reqGroups,allGroups,brute);
     m._inputs=inputs; m.passiveName=passiveName;
     navView.lastResult=m.items[0]?m.items[0].result:null;
     renderNavMulti(m,inputs);
@@ -1201,8 +1203,8 @@ $("navGo").onclick = async () => {
   const target=targets[0];
   const searchInputs=inputs.filter(x=>x!==target);
   $("status").textContent=`导航：${searchInputs.length} 只已有帕鲁 → ${nameOf(target)}`;
-  const r=navSearch(searchInputs.length?searchInputs:inputs,target,passiveId,undefined,reqGroups);
-  if(!r&&reqGroups){ $("status").textContent="导航：找不到能覆盖所有分组的路线"; return; }
+  const r=brute?navSearchBrute(searchInputs.length?searchInputs:inputs,target,reqGroups||allGroups):navSearch(searchInputs.length?searchInputs:inputs,target,passiveId,undefined,reqGroups);
+  if(!r&&reqGroups){ $("status").textContent=brute?"导航：暴力搜索也找不到覆盖所有分组的路线":"导航：找不到能覆盖所有分组的路线"; return; }
   if(passiveId) $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}（遗传 ${passiveName}）`;
   if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
   renderNav(r,inputs,target);
@@ -1227,13 +1229,56 @@ function addNavTarget(id){
 }
 $("navAdd").onclick=()=>{ addNavTarget(resolveId($("navTarget").value)); };
 $("navTarget").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNavTarget(resolveId($("navTarget").value)); } });
-function navSearchMulti(inputs,targets,passiveId,groups,allGroups){
+function navSearchBrute(inputs,target,groups){
+  const edges=navEdges();
+  const groupOf=new Map();
+  (groups||[]).forEach((g,i)=>{ for(const id of g) if(!groupOf.has(id)) groupOf.set(id,i); });
+  const full=(groups&&groups.length)?(1<<groups.length)-1:0;
+  const q=[]; const seen=new Set();
+  for(const p of inputs){
+    if(p===target) continue;
+    const m0=groupOf.has(p)?1<<groupOf.get(p):0;
+    const k=p+"|"+m0; if(seen.has(k)) continue; seen.add(k);
+    q.push({pal:p,mask:m0,path:[]});
+  }
+  let head=0;
+  while(head<q.length){
+    const s=q[head++];
+    if(s.pal===target && s.mask===(full||s.mask)){ return finalizePath(s.path,inputs,groups); }
+    if(s.path.length>=12) continue;
+    for(const [child,other] of (edges[s.pal]||[])){
+      if(child===s.pal) continue;
+      const m=s.mask | (groupOf.has(other)?1<<groupOf.get(other):0);
+      const k=child+"|"+m; if(seen.has(k)) continue; seen.add(k);
+      q.push({pal:child,mask:m,path:s.path.concat([{from:s.pal,other,child}])});
+    }
+  }
+  return null;
+}
+function finalizePath(path,inputs,groups){
+  const groupOf=new Map();
+  (groups||[]).forEach((g,i)=>{ for(const id of g) if(!groupOf.has(id)) groupOf.set(id,i); });
+  const inputSet=new Set(inputs);
+  let mask=0, cost=0, prob=1, ext=0, dex=0;
+  const pc=(x)=>{let c=0;while(x){c+=x&1;x>>=1;}return c;};
+  for(const s of path){
+    mask |= groupOf.has(s.other)?1<<groupOf.get(s.other):0;
+    const n=pc(mask);
+    const p=n?(n<=4?[0,0.4,0.3,0.2,0.1][n]:0):1;
+    s.p=p||1; s.stepCost=1/(p||1);
+    cost+=s.stepCost; prob*=(p||1);
+    s.external=!inputSet.has(s.other);
+    if(s.external){ ext++; dex+=dexNum(s.other); }
+  }
+  return {path,steps:path.length,cost,prob,ext,dex};
+}
+function navSearchMulti(inputs,targets,passiveId,groups,allGroups,brute){
   const inputSet=new Set(inputs);
   const planned=new Set(inputs);
   const items=[];
   for(const t of targets){
     const base=inputs.filter(x=>x!==t);
-    const r=navSearch(base.length?base:inputs,t,passiveId,planned,groups);
+    const r=brute?navSearchBrute(base.length?base:inputs,t,groups||allGroups):navSearch(base.length?base:inputs,t,passiveId,planned,groups);
     if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t)}); for(const st of r.path) planned.add(st.child); }
     else items.push({target:t,done:inputSet.has(t),blocked:!!groups});
   }
