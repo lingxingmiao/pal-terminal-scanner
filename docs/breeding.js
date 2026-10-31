@@ -1233,9 +1233,8 @@ function navSearchMulti(inputs,targets,passiveId,groups,allGroups){
   const items=[];
   for(const t of targets){
     const base=inputs.filter(x=>x!==t);
-    let r=navSearch(base.length?base:inputs,t,passiveId,planned,groups);
-    if(!r&&groups&&inputSet.has(t)) r=navSearch(base.length?base:inputs,t,passiveId,planned,null);
-    if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t),fallback:false}); for(const st of r.path) planned.add(st.child); }
+    const r=navSearch(base.length?base:inputs,t,passiveId,planned,groups);
+    if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t)}); for(const st of r.path) planned.add(st.child); }
     else items.push({target:t,done:inputSet.has(t),blocked:!!groups});
   }
   const seen=new Map(), steps=[];
@@ -1281,7 +1280,8 @@ function renderNavMulti(m,inputs){
   if(!m.items.length){ $("navSummary").textContent="没有找到可行路线"; $("navTable").innerHTML=""; return; }
   const done=m.items.filter(x=>x.done).length;
   const todo=m.items.filter(x=>x.result).length;
-  $("navSummary").textContent=`目标 ${m.items.length} 个 · 已拥有 ${done} 个 · 需配种 ${todo} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）`;
+  const grpTag=m.disp&&m.disp.length&&$("navAllGroups").checked?` · 分组约束 ${m.disp.length} 组（需全覆盖）`:"";
+  $("navSummary").textContent=`目标 ${m.items.length} 个 · 已拥有 ${done} 个 · 需配种 ${todo} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）${grpTag}`;
   const gl=navGroups.filter(g=>g.ids&&g.ids.length);
   const accByKey=new Map();
   for(const {result} of m.items){ if(!result) continue;
