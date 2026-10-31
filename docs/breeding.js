@@ -591,14 +591,23 @@ function renderNav(result,inputs,target){
   $("navSummary").textContent = result.prob<1
     ? `总步数 ${result.steps} · 成功率 ${pct}% · 期望蛋糕 ${result.cost.toFixed(2)} · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`
     : `总步数 ${result.steps} · 期望蛋糕 ${result.cost.toFixed(2)}（每步 1 个） · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
+  const gl=navGroups.filter(g=>g.ids&&g.ids.length);
+  const accs=[]; let acc=0;
+  result.path.forEach((p,i)=>{
+    if(i===0) gl.forEach((g,gi)=>{ if(g.ids.includes(p.from)) acc|=1<<gi; });
+    gl.forEach((g,gi)=>{ if(g.ids.includes(p.other)) acc|=1<<gi; });
+    accs.push(acc);
+  });
   const rows=result.path.map((p,i)=>{
     const ext=p.external?`<span class="tag ext">外部 No.${dexNum(p.other)}</span>`:`<span class="tag in">输入</span>`;
+    const names=gl.filter((_,gi)=>accs[i]&(1<<gi)).map(g=>g.name);
     return `<tr><td>${i+1}</td><td>${nameOf(p.from)}<br><span class="mono">${p.from}</span></td>
       <td>${nameOf(p.other)}<br><span class="mono">${p.other}</span> ${ext}</td>
       <td>${nameOf(p.child)}<br><span class="mono">${p.child}</span></td>
-      <td>${p.stepCost?p.stepCost.toFixed(2):"—"}</td></tr>`;
+      <td>${p.stepCost?p.stepCost.toFixed(2):"—"}</td>
+      <td>${names.length?names.join("、"):"—"}</td></tr>`;
   }).join("");
-  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>当前</th><th>另一亲本</th><th>子代</th><th>蛋糕</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>当前</th><th>另一亲本</th><th>子代</th><th>蛋糕</th><th>子代累计词条</th></tr></thead><tbody>${rows}</tbody></table>`;
   drawNavGraph(result,inputs,target);
 }
 
