@@ -59,7 +59,7 @@ async function init() {
       for(const t of params.get("owned").split(",")){ const id=resolveId(t); if(id){ state.manualAdd.add(id); state.manualRemove.delete(id); } }
       mergeOwned(); renderOwned();
     }
-    if(params.get("work")){ $("workType").value=params.get("work"); $("workLevel").value=params.get("lv")||"1"; setTimeout(()=>$("workGo").click(),300); }
+    if(params.get("wq")){ $("target").value=params.get("wq"); $("target").dispatchEvent(new Event("input")); }
     if(params.get("mode")==="nav"){
       switchMode("nav");
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
@@ -913,18 +913,53 @@ $("navCollapse").onclick=()=>{
   $("status").textContent="已收起所有展开分支";
 };
 
-// ---------------- work suitability search ----------------
+// ---------------- work suitability search (in target inputs) ----------------
+const WORK_MAP={
+  "生火":"EmitFlame","点火":"EmitFlame","浇水":"Watering","播种":"Seeding","发电":"GenerateElectricity",
+  "手工":"Handcraft","手工制作":"Handcraft","制作":"Handcraft","采集":"Collection","伐木":"Deforest",
+  "采矿":"Mining","采油":"OilExtraction","制药":"ProductMedicine","冷却":"Cool","搬运":"Transport","牧场":"MonsterFarm"
+};
+let workPopFor=null;
+function findWork(text){
+  const t=(text||"").trim();
+  if(!t) return null;
+  for(const k in WORK_MAP) if(k===t||t.includes(k)) return WORK_MAP[k];
+  const low=t.toLowerCase();
+  for(const w of Object.values(WORK_MAP)) if(w.toLowerCase()===low) return w;
+  return null;
+}
+function closeWorkPop(){ const p=$("workPop"); if(p){ p.hidden=true; } workPopFor=null; }
+function showWorkPop(input,type){
+  const rows=Object.entries(state.works||{}).filter(([id,w])=>(w[type]||0)>0)
+    .sort((a,b)=>((b[1][type]||0)-(a[1][type]||0))||(dexNum(a[0])-dexNum(b[0])));
+  const p=$("workPop");
+  const r=input.getBoundingClientRect();
+  p.style.left=(r.left+window.scrollX)+"px";
+  p.style.top=(r.bottom+window.scrollY+4)+"px";
+  p.style.width=Math.max(260,r.width)+"px";
+  p.innerHTML=rows.map(([id,w])=>`<div class="wp-row" data-id="${id}"><img src="${(state.icons&&state.icons[id])||""}"><span class="wp-name">${nameOf(id)}</span><span class="wp-lv">Lv.${w[type]}</span></div>`).join("")||'<div class="hint">没有结果</div>';
+  p.querySelectorAll(".wp-row").forEach(el=>el.onclick=()=>{
+    const id=el.dataset.id;
+    input.value=nameOf(id);
+    closeWorkPop();
+    if(input.id==="target"){ setTarget(id); switchMode("rev"); openTarget(); }
+  });
+  p.hidden=false;
+  workPopFor=input;
+}
+function bindWorkInput(input){
+  input.addEventListener("input",()=>{
+    const type=findWork(input.value);
+    if(type) showWorkPop(input,type); else if(workPopFor===input) closeWorkPop();
+  });
+  input.addEventListener("blur",()=>{ setTimeout(()=>{ if(workPopFor===input) closeWorkPop(); },180); });
+}
+bindWorkInput($("target"));
+bindWorkInput($("navTarget"));
 $("ownAll").onclick=()=>{
   for(const id of Object.keys(state.breed)){ state.manualAdd.add(id); state.manualRemove.delete(id); }
   mergeOwned(); renderShots(); renderOwned();
   $("status").textContent=`已加入全部 ${Object.keys(state.breed).length} 只帕鲁`;
-};
-$("workGo").onclick=()=>{
-  const type=$("workType").value, lv=+$("workLevel").value;
-  const rows=Object.entries(state.works||{}).filter(([id,w])=>(w[type]||0)>=lv)
-    .sort((a,b)=>((b[1][type]||0)-(a[1][type]||0))||(dexNum(a[0])-dexNum(b[0])));
-  $("workResults").innerHTML=rows.map(([id,w])=>`<span class="wr" data-id="${id}"><img src="${(state.icons&&state.icons[id])||""}">${nameOf(id)} <span class="lv">${w[type]}</span></span>`).join("")||'<span class="hint">没有符合条件的帕鲁</span>';
-  $("workResults").querySelectorAll(".wr").forEach(el=>el.onclick=()=>{ setTarget(el.dataset.id); switchMode("rev"); openTarget(); });
 };
 
 // ---------------- events ----------------

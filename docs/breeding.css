@@ -168,3 +168,10 @@
 .work-results .wr:hover{border-color:#3a4a5a}
 .work-results .wr img{width:18px;height:18px;border-radius:50%;object-fit:contain}
 .work-results .wr .lv{color:#7fd1ff}
+
+.work-pop{position:absolute;z-index:60;max-height:300px;overflow:auto;background:#12161b;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:4px}
+.wp-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;cursor:pointer;font-size:12px;color:#dfe8f0}
+.wp-row:hover{background:#1d2630}
+.wp-row img{width:22px;height:22px;border-radius:50%;object-fit:contain}
+.wp-name{flex:1}
+.wp-lv{color:#7fd1ff;font-size:11px}

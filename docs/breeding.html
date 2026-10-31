@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>给你配了 - 幻兽帕鲁自动配种工具</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="breeding.css?v=20261031n">
+<link rel="stylesheet" href="breeding.css?v=20261031o">
 </head>
 <body>
 <header>
@@ -28,33 +28,7 @@
     <div class="own-add"><input id="ownInput" list="pallist" placeholder="手动添加：中文 / 拼音 / 编号"><button id="ownAdd">添加</button></div>
     <div id="chips" class="chips"></div>
     <div id="recs" class="recs"></div>
-    <div class="work-search">
-      <h3>按工作适性找帕鲁</h3>
-      <div class="work-row">
-        <select id="workType">
-          <option value="EmitFlame">生火</option>
-          <option value="Watering">浇水</option>
-          <option value="Seeding">播种</option>
-          <option value="GenerateElectricity">发电</option>
-          <option value="Handcraft">手工</option>
-          <option value="Collection">采集</option>
-          <option value="Deforest">伐木</option>
-          <option value="Mining">采矿</option>
-          <option value="OilExtraction">采油</option>
-          <option value="ProductMedicine">制药</option>
-          <option value="Cool">冷却</option>
-          <option value="Transport">搬运</option>
-          <option value="MonsterFarm">牧场</option>
-        </select>
-        <select id="workLevel">
-          <option value="1">≥ Lv.1</option><option value="2">≥ Lv.2</option><option value="3">≥ Lv.3</option>
-          <option value="4">≥ Lv.4</option><option value="5">≥ Lv.5</option><option value="6">≥ Lv.6</option>
-          <option value="7">≥ Lv.7</option><option value="8">≥ Lv.8</option>
-        </select>
-        <button id="workGo">查找</button>
-      </div>
-      <div id="workResults" class="work-results"></div>
-    </div>
+
   </section>
 
   <section class="panel">
@@ -143,6 +117,7 @@
 </footer>
 
 <script src="vendor/ort.min.js"></script>
-<script src="breeding.js?v=20261031n"></script>
+<div id="workPop" class="work-pop" hidden></div>
+<script src="breeding.js?v=20261031o"></script>
 </body>
 </html>
