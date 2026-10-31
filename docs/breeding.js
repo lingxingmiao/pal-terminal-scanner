@@ -685,7 +685,7 @@ function paintNavGraph(){
   }
   // nodes (round thumbnails)
   for(const n of navView.nodes){
-    const r=n.id===target?24:18;
+    const r=n.type==="target"?24:18;
     let ring="#4a5a6a";
     if(n.type==="target") ring="#ff6b5e";
     else if(n.type==="owned") ring="#38d47a";
@@ -1109,14 +1109,68 @@ drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
 $("navGo").onclick = () => {
   const inputs = navPick.size ? [...navPick] : [...state.owned];
-  const target=resolveId($("navTarget").value);
+  const raw=$("navTarget").value.split(/[,，、\n]+/).map(s=>s.trim()).filter(Boolean);
+  const targets=raw.map(resolveId).filter(Boolean);
   if(!inputs.length){$("status").textContent="导航：先在左侧截图识别或手动添加帕鲁";return;}
-  if(!target){$("status").textContent="导航：目标没识别出来";return;}
+  if(!targets.length){$("status").textContent="导航：目标没识别出来";return;}
+  if(targets.length>1){
+    $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${targets.length} 个目标`;
+    const m=navSearchMulti(inputs,targets);
+    m._inputs=inputs;
+    navView.lastResult=m.items[0]?m.items[0].result:null;
+    renderNavMulti(m,inputs);
+    return;
+  }
+  const target=targets[0];
   $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}`;
   const r=navSearch(inputs,target,null);
   if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
   renderNav(r,inputs,target);
 };
+function navSearchMulti(inputs,targets){
+  const items=[];
+  for(const t of targets){ const r=navSearch(inputs,t,null); if(r) items.push({target:t,result:r}); }
+  const seen=new Set(), steps=[];
+  for(const {result} of items) for(const s of result.path){
+    const k=`${s.from}|${s.other}|${s.child}`;
+    if(!seen.has(k)){ seen.add(k); steps.push(s); }
+  }
+  return {multi:true, items, steps, cost:steps.length};
+}
+function buildNavGraphMulti(m,inputs){
+  const inputSet=new Set(inputs), nodes=new Map(), edges=[];
+  const add=(id,type)=>{ if(!nodes.has(id)) nodes.set(id,{id,type,x:0,y:0}); const n=nodes.get(id); if(type==="target") n.type="target"; else if(n.type!=="target") n.type=type; return n; };
+  for(const {target,result} of m.items){
+    add(target,"target");
+    for(const p of result.path){
+      const f=add(p.from,inputSet.has(p.from)?"owned":"external");
+      const o=add(p.other,p.external?"external":"owned");
+      const c=add(p.child,p.child===target?"target":"child");
+      edges.push({a:f.id,b:c.id,kind:"path"});
+      edges.push({a:o.id,b:c.id,kind:"path"});
+    }
+  }
+  navView.nodes=[...nodes.values()]; navView.edges=edges; navView.expandedPlans=new Map();
+  layoutNav();
+}
+function renderNavMulti(m,inputs){
+  if(!m.items.length){ $("navSummary").textContent="没有找到可行路线"; $("navTable").innerHTML=""; return; }
+  $("navSummary").textContent=`目标 ${m.items.length} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）`;
+  const seen=new Set();
+  const rows=[];
+  for(const {target,result} of m.items){
+    result.path.forEach((p,i)=>{
+      const k=`${p.from}|${p.other}|${p.child}`;
+      const shared=seen.has(k); seen.add(k);
+      rows.push(`<tr><td>${i+1}</td><td>${nameOf(target)}</td><td>${nameOf(p.from)} + ${nameOf(p.other)}</td><td>${nameOf(p.child)}</td><td>${shared?'<span class="tag in">共用</span>':'—'}</td></tr>`);
+    });
+  }
+  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>目标</th><th>父母</th><th>子代</th><th>共用</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  syncCanvasSize();
+  buildNavGraphMulti(m,inputs);
+  paintNavGraph();
+  startNavAnim();
+}
 $("gen").onclick = () => { const id = resolveId($("target").value); if (!id) return; setTarget(id); openTarget(); };
 $("target").addEventListener("keydown", e => { if (e.key === "Enter") $("gen").click(); });
 $("collapse").onclick = () => { state.expanded = new Map(); renderExplorer(); };
