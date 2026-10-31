@@ -587,7 +587,7 @@ class Heap{
 
 function renderNav(result,inputs,target){
   if(!result){$("navSummary").textContent="没有找到可行路线（深度不够或图不连通）。";$("navTable").innerHTML="";return;}
-  const pct=(result.prob*100).toFixed(1);
+  const pct=result.prob<0.001?(result.prob*100).toFixed(3):(result.prob*100).toFixed(1);
   $("navSummary").textContent = result.prob<1
     ? `总步数 ${result.steps} · 成功率 ${pct}% · 期望蛋糕 ${result.cost.toFixed(2)} · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`
     : `总步数 ${result.steps} · 期望蛋糕 ${result.cost.toFixed(2)}（每步 1 个） · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
@@ -605,9 +605,10 @@ function renderNav(result,inputs,target){
       <td>${nameOf(p.other)}<br><span class="mono">${p.other}</span> ${ext}</td>
       <td>${nameOf(p.child)}<br><span class="mono">${p.child}</span></td>
       <td>${p.stepCost?p.stepCost.toFixed(2):"—"}</td>
+      <td>${p.stepCost?((1/p.stepCost)*100).toFixed(0)+"%":"—"}</td>
       <td>${names.length?names.join("、"):"—"}</td></tr>`;
   }).join("");
-  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>当前</th><th>另一亲本</th><th>子代</th><th>蛋糕</th><th>子代累计词条</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>当前</th><th>另一亲本</th><th>子代</th><th>蛋糕</th><th>本步概率</th><th>子代累计词条</th></tr></thead><tbody>${rows}</tbody></table>`;
   drawNavGraph(result,inputs,target);
 }
 
