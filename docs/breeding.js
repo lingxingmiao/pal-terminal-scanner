@@ -867,7 +867,15 @@ function saveGroups(){ try{ localStorage.setItem("pal_nav_groups", JSON.stringif
 function setPick(ids){ navPick.clear(); if(ids) for(const id of ids) navPick.add(id); }
 function renderNavPick(){
   const el=$("navPick"); if(!el) return;
-  const ids=[...state.owned].sort((a,b)=>dexNum(a)-dexNum(b));
+  const q=($("navPickSearch")?$("navPickSearch").value:"").trim().toLowerCase();
+  let ids=[...state.owned].sort((a,b)=>dexNum(a)-dexNum(b));
+  if(q){
+    ids=ids.filter(id=>{
+      const nm=nameOf(id).toLowerCase();
+      const mt=state.meta&&state.meta[id];
+      return nm.includes(q)||id.toLowerCase().includes(q)||(mt&&(mt.py.includes(q)||mt.pyi.includes(q)||mt.dex.toLowerCase().includes(q)));
+    });
+  }
   el.innerHTML=ids.length?ids.map(id=>`<label class="pick${navPick.has(id)?" on":""}"><input type="checkbox" data-id="${id}" ${navPick.has(id)?"checked":""}><img src="${(state.icons&&state.icons[id])||""}"><span>${nameOf(id)}</span></label>`).join(""):'<span class="hint">还没有已有帕鲁</span>';
   el.querySelectorAll("input").forEach(cb=>cb.onchange=()=>{
     const id=cb.dataset.id;
@@ -935,6 +943,7 @@ $("navGroupSave").onclick=()=>{
     });
   }
 };
+$("navPickSearch").addEventListener("input",renderNavPick);
 $("navPickAll").onclick=()=>{ for(const id of state.owned) navPick.add(id); renderNavPick(); if(navGroupIdx>=0){ navGroups[navGroupIdx].ids=[...navPick]; saveGroups(); renderGroupCards(); } };
 $("navPickNone").onclick=()=>{ navPick.clear(); renderNavPick(); if(navGroupIdx>=0){ navGroups[navGroupIdx].ids=[]; saveGroups(); renderGroupCards(); } };
 $("navCollapse").onclick=()=>{
