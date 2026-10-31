@@ -508,10 +508,13 @@ function navEdges(){
   }
   return state.edges;
 }
+const distCache=new Map();
 function reverseDist(target){
+  if(distCache.has(target)) return distCache.get(target);
   const dist={[target]:0}, q=[target], rev={};
   for(const [child,pairs] of Object.entries(state.breed)) for(const [a,b] of pairs){(rev[child]||(rev[child]=[])).push(a,b);}
   while(q.length){const u=q.shift();for(const p of (rev[u]||[])){if(dist[p]===undefined){dist[p]=dist[u]+1;q.push(p);}}}
+  distCache.set(target,dist);
   return dist;
 }
 function navSearch(inputs,target,passiveId,planned,groups){
@@ -519,20 +522,21 @@ function navSearch(inputs,target,passiveId,planned,groups){
   const groupOf=new Map();
   if(groups) groups.forEach((g,i)=>{ for(const id of g) if(!groupOf.has(id)) groupOf.set(id,i); });
   const fullMask=groups&&groups.length?(1<<groups.length)-1:0;
+  if(inputs.every(p=>dist[p]===undefined)) return null;
   const pq=new Heap(); const best=new Map();
   let bestResult=null,bestKey=null,exp=0;
   for(const p of inputs){
     const m0=groupOf.has(p)?1<<groupOf.get(p):0;
     pq.push({pal:p,carry:!!passiveId,mask:m0,cost:0,prob:1,ext:0,dex:0,steps:0,path:[]},[0,0,0,0]);
   }
-  while(pq.size&&exp<200000){
+  while(pq.size&&exp<30000){
     const s=pq.pop(); exp++;
     if(s.pal===target&&(!passiveId||s.carry)&&(!fullMask||s.mask===fullMask)){
       const key=[s.cost,s.ext,s.dex,s.steps];
       if(!bestKey||key<bestKey){bestKey=key;bestResult=s;}
       continue;
     }
-    if(s.steps>=10) continue;
+    if(s.steps>=6) continue;
     const cands=(edges[s.pal]||[]).filter(([child,other])=>child!==s.pal);
     cands.sort((x,y)=>{
       const hx=dist[x[0]]??999, hy=dist[y[0]]??999;
@@ -543,7 +547,7 @@ function navSearch(inputs,target,passiveId,planned,groups){
     });
     const seenChild=new Set(); let expanded=0;
     for(const [child,other] of cands){
-      if(expanded>=12) break;
+      if(expanded>=8) break;
       if(seenChild.has(child)) continue;
       seenChild.add(child); expanded++;
       const otherIn=inputSet.has(other);
@@ -975,30 +979,45 @@ async function detectAll(img){
   const minSide=Math.min(cw,ch);
   let sizes;
   if(minSide<300) sizes=[Math.round(minSide*0.6),Math.round(minSide*0.8)];
-  else sizes=[64,96,128,160,192,224,256].filter(s=>s<=minSide*0.95);
+  else sizes=[Math.round(minSide*0.18),Math.round(minSide*0.28),Math.round(minSide*0.4)].filter(s=>s>=40&&s<=minSide*0.9);
   const cands=[];
   for(const size of sizes){
-    const stride=Math.max(10,Math.round(size*0.6));
+    const stride=Math.max(14,Math.round(size*0.7));
     for(let y=0;y+size<=ch;y+=stride)for(let x=0;x+size<=cw;x+=stride){
       if(regionActive(data,cw,x,y,size)) cands.push({x,y,size});
     }
-    if(cands.length>4000) break;
+    if(cands.length>1500) break;
   }
-  const results=[]; const BATCH=64;
+  if(cands.length>1200){
+    for(let i=cands.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [cands[i],cands[j]]=[cands[j],cands[i]]; }
+    cands.length=1200;
+  }
+  const scratch=document.createElement("canvas"); scratch.width=scratch.height=SIZE;
+  const sctx=scratch.getContext("2d");
+  function cropTensor(x,y,size){
+    sctx.clearRect(0,0,SIZE,SIZE);
+    sctx.imageSmoothingQuality="high";
+    sctx.drawImage(cv,x,y,size,size,0,0,SIZE,SIZE);
+    const d=sctx.getImageData(0,0,SIZE,SIZE).data;
+    const arr=new Float32Array(3*SIZE*SIZE);
+    for(let i=0;i<SIZE*SIZE;i++){arr[i]=(d[i*4]/255-.5)/.5;arr[SIZE*SIZE+i]=(d[i*4+1]/255-.5)/.5;arr[2*SIZE*SIZE+i]=(d[i*4+2]/255-.5)/.5;}
+    return arr;
+  }
+  const results=[], BATCH=64;
   for(let i=0;i<cands.length;i+=BATCH){
     const batch=cands.slice(i,i+BATCH);
-    const arrs=batch.map(c=>cropTensorFrom(cv,c.x,c.y,c.size));
-    const n=arrs.length, inp=new Float32Array(n*3*SIZE*SIZE);
-    arrs.forEach((a,j)=>inp.set(a,j*3*SIZE*SIZE));
-    const out=await state.session.run({input:new ort.Tensor("float32",inp,[n,3,SIZE,SIZE])});
+    const inp=new Float32Array(batch.length*3*SIZE*SIZE);
+    batch.forEach((c,j)=>inp.set(cropTensor(c.x,c.y,c.size),j*3*SIZE*SIZE));
+    const out=await state.session.run({input:new ort.Tensor("float32",inp,[batch.length,3,SIZE,SIZE])});
     const logits=out.logits.data;
-    for(let j=0;j<n;j++){
+    for(let j=0;j<batch.length;j++){
       let bi=0,off=j*300;
       for(let k=1;k<300;k++) if(logits[off+k]>logits[off+bi]) bi=k;
       let sum=0; for(let k=0;k<300;k++) sum+=Math.exp(logits[off+k]-logits[off+bi]);
       const conf=1/sum, label=state.labels[bi];
       if(label!=="__empty__"&&conf>0.5) results.push({...batch[j],label,conf});
     }
+    await new Promise(r=>setTimeout(r,0));
   }
   results.sort((a,b)=>b.conf-a.conf);
   const kept=[];
@@ -1007,27 +1026,26 @@ async function detectAll(img){
     const dup=kept.some(k=>{
       const kx=k.x+k.size/2, ky=k.y+k.size/2;
       const d=Math.hypot(cx-kx,cy-ky);
-      const same=k.label===r.label;
-      return d < (same?1.0:0.5)*Math.max(r.size,k.size);
+      return d < (k.label===r.label?1.0:0.5)*Math.max(r.size,k.size);
     });
     if(!dup) kept.push(r);
-    if(kept.length>=60) break;
+    if(kept.length>=40) break;
   }
-  // refine each box: search nearby centers for the highest confidence
-  const offs=[-0.24,-0.12,0,0.12,0.24];
+  // refine kept boxes (3x3 offsets)
+  const offs=[-0.12,0,0.12];
   const jobs=[], meta=[];
   for(const k of kept) for(const ox of offs) for(const oy of offs){
     const x=Math.round(k.x+ox*k.size), y=Math.round(k.y+oy*k.size);
-    if(x<0||y<0||x+k.size>cv.width||y+k.size>cv.height) continue;
-    jobs.push(cropTensorFrom(cv,x,y,k.size)); meta.push({k,x,y});
+    if(x<0||y<0||x+k.size>cw||y+k.size>ch) continue;
+    jobs.push(cropTensor(x,y,k.size)); meta.push({k,x,y});
   }
   for(let i=0;i<jobs.length;i+=BATCH){
     const batch=jobs.slice(i,i+BATCH);
-    const n=batch.length, inp=new Float32Array(n*3*SIZE*SIZE);
+    const inp=new Float32Array(batch.length*3*SIZE*SIZE);
     batch.forEach((a,j)=>inp.set(a,j*3*SIZE*SIZE));
-    const out=await state.session.run({input:new ort.Tensor("float32",inp,[n,3,SIZE,SIZE])});
+    const out=await state.session.run({input:new ort.Tensor("float32",inp,[batch.length,3,SIZE,SIZE])});
     const logits=out.logits.data;
-    for(let j=0;j<n;j++){
+    for(let j=0;j<batch.length;j++){
       let bi=0,off=j*300;
       for(let k2=1;k2<300;k2++) if(logits[off+k2]>logits[off+bi]) bi=k2;
       let sum=0; for(let k2=0;k2<300;k2++) sum+=Math.exp(logits[off+k2]-logits[off+bi]);
@@ -1035,6 +1053,7 @@ async function detectAll(img){
       const m=meta[i+j]; if(!m) continue;
       if(label!=="__empty__" && conf>m.k.conf){ m.k.conf=conf; m.k.label=label; m.k.x=m.x; m.k.y=m.y; }
     }
+    await new Promise(r=>setTimeout(r,0));
   }
   kept.sort((a,b)=>b.conf-a.conf);
   return {cv,scale,kept};
@@ -1133,7 +1152,7 @@ const drop = $("drop");
 drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
-$("navGo").onclick = () => {
+$("navGo").onclick = async () => {
   const inputs = navPick.size ? [...navPick] : [...state.owned];
   let passiveId=null, passiveName="";
   const reqGroups=$("navAllGroups").checked ? navGroups.filter(g=>g.ids&&g.ids.length).map(g=>new Set(g.ids)) : null;
@@ -1149,12 +1168,16 @@ $("navGo").onclick = () => {
   if(typed&&!targets.includes(typed)) targets.push(typed);
   if(!inputs.length){$("status").textContent="导航：先在左侧截图识别或手动添加帕鲁";return;}
   if(!targets.length){$("status").textContent="导航：目标没识别出来";return;}
+  $("status").textContent="导航：计算中…";
+  await new Promise(r=>setTimeout(r,30));
+  const t0=performance.now();
   if(targets.length>1){
     $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${targets.length} 个目标`;
     const m=navSearchMulti(inputs,targets,passiveId,reqGroups);
     m._inputs=inputs; m.passiveName=passiveName;
     navView.lastResult=m.items[0]?m.items[0].result:null;
     renderNavMulti(m,inputs);
+    $("status").textContent+=` · ${Math.round(performance.now()-t0)}ms`;
     return;
   }
   const target=targets[0];
@@ -1165,6 +1188,7 @@ $("navGo").onclick = () => {
   if(passiveId) $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}（遗传 ${passiveName}）`;
   if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
   renderNav(r,inputs,target);
+  $("status").textContent+=` · ${Math.round(performance.now()-t0)}ms`;
 };
 const navTargets=[];
 function renderNavTargets(){
@@ -1195,11 +1219,12 @@ function navSearchMulti(inputs,targets,passiveId,groups){
     if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t)}); for(const st of r.path) planned.add(st.child); }
     else items.push({target:t,done:true});
   }
-  const seen=new Set(), steps=[];
-  for(const {result} of items) for(const s of result.path){
+  const seen=new Map(), steps=[];
+  for(const {target,result} of items){ if(!result) continue; for(const s of result.path){
     const k=`${s.from}|${s.other}|${s.child}`;
-    if(!seen.has(k)){ seen.add(k); steps.push(s); }
-  }
+    if(!seen.has(k)){ const st={...s,usedBy:new Set([target])}; seen.set(k,st); steps.push(st); }
+    else seen.get(k).usedBy.add(target);
+  }}
   const cost=steps.reduce((a,s)=>a+(s.stepCost||1),0);
   return {multi:true, items, steps, cost};
 }
@@ -1220,25 +1245,22 @@ function buildNavGraphMulti(m,inputs){
   layoutNav();
 }
 function renderNavMulti(m,inputs){
+ try{
   if(!m.items.length){ $("navSummary").textContent="没有找到可行路线"; $("navTable").innerHTML=""; return; }
   const done=m.items.filter(x=>x.done).length;
   const todo=m.items.filter(x=>x.result).length;
   $("navSummary").textContent=`目标 ${m.items.length} 个 · 已拥有 ${done} 个 · 需配种 ${todo} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）`;
-  const seen=new Set();
-  const rows=[];
-  for(const {target,result,done} of m.items){
-    if(!result){ rows.push(`<tr><td>—</td><td>${nameOf(target)}</td><td colspan="3">已在输入里，无需配种（点节点可看方案）</td></tr>`); continue; }
-    result.path.forEach((p,i)=>{
-      const k=`${p.from}|${p.other}|${p.child}`;
-      const shared=seen.has(k); seen.add(k);
-      rows.push(`<tr><td>${i+1}</td><td>${nameOf(target)}${done?' <span class="tag in">已拥有</span>':''}</td><td>${nameOf(p.from)} + ${nameOf(p.other)}</td><td>${nameOf(p.child)}</td><td>${shared?'<span class="tag in">共用</span>':'—'}</td></tr>`);
-    });
-  }
-  $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>目标</th><th>父母</th><th>子代</th><th>共用</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  const rows=m.steps.map((st,i)=>{
+    const users=[...st.usedBy].map(nameOf).join("、");
+    return `<tr><td>${i+1}</td><td>${nameOf(st.from)} + ${nameOf(st.other)}</td><td>${nameOf(st.child)}</td><td>${users}</td></tr>`;
+  }).join("");
+  const doneTargets=m.items.filter(x=>!x.result).map(x=>nameOf(x.target));
+  $("navTable").innerHTML=`<table><thead><tr><th>步骤</th><th>父母</th><th>子代</th><th>服务于目标</th></tr></thead><tbody>${rows}</tbody></table>${doneTargets.length?`<p class="hint">已拥有无需配种：${doneTargets.join("、")}</p>`:""}`;
   syncCanvasSize();
   buildNavGraphMulti(m,inputs);
   paintNavGraph();
   startNavAnim();
+ }catch(e){ $("navSummary").textContent="渲染出错："+e.message; console.error(e); }
 }
 $("gen").onclick = () => { const id = resolveId($("target").value); if (!id) return; setTarget(id); openTarget(); };
 $("target").addEventListener("keydown", e => { if (e.key === "Enter") $("gen").click(); });
