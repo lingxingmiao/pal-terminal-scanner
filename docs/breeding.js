@@ -1281,10 +1281,22 @@ function renderNavMulti(m,inputs){
   const done=m.items.filter(x=>x.done).length;
   const todo=m.items.filter(x=>x.result).length;
   $("navSummary").textContent=`目标 ${m.items.length} 个 · 已拥有 ${done} 个 · 需配种 ${todo} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）`;
-  const disp=m.disp||[];
+  const gl=navGroups.filter(g=>g.ids&&g.ids.length);
+  const accByKey=new Map();
+  for(const {result} of m.items){ if(!result) continue;
+    let acc=0;
+    result.path.forEach((p,i)=>{
+      if(i===0) gl.forEach((g,gi)=>{ if(g.ids.includes(p.from)) acc|=1<<gi; });
+      gl.forEach((g,gi)=>{ if(g.ids.includes(p.other)) acc|=1<<gi; });
+      const kk=`${p.from}|${p.other}|${p.child}`;
+      accByKey.set(kk,(accByKey.get(kk)||0)|acc);
+    });
+  }
   const rows=m.steps.map((st,i)=>{
     const users=[...st.usedBy].map(nameOf).join("、");
-    const names=disp.filter((_,gi)=>((st.accMask||0)&(1<<gi))).map(g=>g.name);
+    const kk=`${st.from}|${st.other}|${st.child}`;
+    const mask=accByKey.get(kk)||0;
+    const names=gl.filter((_,gi)=>mask&(1<<gi)).map(g=>g.name);
     return `<tr><td>${i+1}</td><td>${nameOf(st.from)} + ${nameOf(st.other)}</td><td>${nameOf(st.child)}</td><td>${users}</td><td>${names.length?names.join("、"):"—"}</td></tr>`;
   }).join("");
   const doneTargets=m.items.filter(x=>!x.result).map(x=>nameOf(x.target));
