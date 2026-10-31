@@ -1259,12 +1259,14 @@ function renderNavMulti(m,inputs){
   const done=m.items.filter(x=>x.done).length;
   const todo=m.items.filter(x=>x.result).length;
   $("navSummary").textContent=`目标 ${m.items.length} 个 · 已拥有 ${done} 个 · 需配种 ${todo} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）`;
+  const groupsOfPal=(id)=>navGroups.filter(g=>g.ids&&g.ids.includes(id)).map(g=>g.name);
   const rows=m.steps.map((st,i)=>{
     const users=[...st.usedBy].map(nameOf).join("、");
-    return `<tr><td>${i+1}</td><td>${nameOf(st.from)} + ${nameOf(st.other)}</td><td>${nameOf(st.child)}</td><td>${users}</td></tr>`;
+    const gs=[...new Set([...groupsOfPal(st.from),...groupsOfPal(st.other),...groupsOfPal(st.child)])];
+    return `<tr><td>${i+1}</td><td>${nameOf(st.from)} + ${nameOf(st.other)}</td><td>${nameOf(st.child)}</td><td>${users}</td><td>${gs.length?gs.join("、"):"—"}</td></tr>`;
   }).join("");
   const doneTargets=m.items.filter(x=>!x.result).map(x=>nameOf(x.target));
-  $("navTable").innerHTML=`<table><thead><tr><th>步骤</th><th>父母</th><th>子代</th><th>服务于目标</th></tr></thead><tbody>${rows}</tbody></table>${doneTargets.length?`<p class="hint">已拥有无需配种：${doneTargets.join("、")}</p>`:""}`;
+  $("navTable").innerHTML=`<table><thead><tr><th>步骤</th><th>父母</th><th>子代</th><th>服务于目标</th><th>遗传分组</th></tr></thead><tbody>${rows}</tbody></table>${doneTargets.length?`<p class="hint">已拥有无需配种：${doneTargets.join("、")}</p>`:""}`;
   syncCanvasSize();
   buildNavGraphMulti(m,inputs);
   paintNavGraph();
