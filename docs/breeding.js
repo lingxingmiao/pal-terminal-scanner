@@ -7,7 +7,7 @@ const state = {
   labels: null, zh: null, icons: null,
   breed: null, pairIndex: null,
   owned: new Set(), ownedConf: new Map(), manualAdd: new Set(), manualRemove: new Set(),
-  target: null, mode: "rev", backendMode: "gpu", meta: null,
+  target: null, mode: "rev", backendMode: "gpu", meta: null, works: null,
   expanded: new Map(),
   grid: { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 },
 };
@@ -27,13 +27,14 @@ async function init() {
     }
     updateBackendBtn();
     $("status").textContent = `模型就绪（${state.backend}），等待截图…`;
-    const [labels, zh, breed, meta] = await Promise.all([
+    const [labels, zh, breed, meta, works] = await Promise.all([
       fetch("models/labels.json").then(r => r.json()),
       fetch("models/zh_names.json").then(r => r.json()),
       fetch("breeding.json").then(r => r.json()),
       fetch("meta.json").then(r => r.json()),
+      fetch("works.json").then(r => r.json()),
     ]);
-    state.labels = labels.labels; state.zh = zh; state.breed = breed; state.meta = meta;
+    state.labels = labels.labels; state.zh = zh; state.breed = breed; state.meta = meta; state.works = works;
     state.pairIndex = new Map();
     for (const [child, pairs] of Object.entries(breed)) for (const [a, b] of pairs) {
       const k = a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -58,6 +59,7 @@ async function init() {
       for(const t of params.get("owned").split(",")){ const id=resolveId(t); if(id){ state.manualAdd.add(id); state.manualRemove.delete(id); } }
       mergeOwned(); renderOwned();
     }
+    if(params.get("work")){ $("workType").value=params.get("work"); $("workLevel").value=params.get("lv")||"1"; setTimeout(()=>$("workGo").click(),300); }
     if(params.get("mode")==="nav"){
       switchMode("nav");
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
@@ -593,8 +595,6 @@ function buildNavGraph(result,inputs,target){
     const c=add(p.child,p.child===target?"target":"child");
     edges.push({a:f.id,b:c.id,kind:"path"});
     edges.push({a:o.id,b:c.id,kind:"path"});
-    const cands=(navEdges()[f.id]||[]).filter(([ch,ot])=>ch!==f.id).slice(0,4);
-    for(const [ch,ot] of cands){ const cn=add(ot,"candidate"); edges.push({a:f.id,b:cn.id,kind:"cand"}); }
   }
   navView.nodes=[...nodes.values()]; navView.edges=edges;
   navView.expandedPlans=new Map();
@@ -911,6 +911,20 @@ $("navCollapse").onclick=()=>{
   drawNavGraph(r,r._inputs,r._target);
   $("nodePop").hidden=true;
   $("status").textContent="已收起所有展开分支";
+};
+
+// ---------------- work suitability search ----------------
+$("ownAll").onclick=()=>{
+  for(const id of Object.keys(state.breed)){ state.manualAdd.add(id); state.manualRemove.delete(id); }
+  mergeOwned(); renderShots(); renderOwned();
+  $("status").textContent=`已加入全部 ${Object.keys(state.breed).length} 只帕鲁`;
+};
+$("workGo").onclick=()=>{
+  const type=$("workType").value, lv=+$("workLevel").value;
+  const rows=Object.entries(state.works||{}).filter(([id,w])=>(w[type]||0)>=lv)
+    .sort((a,b)=>((b[1][type]||0)-(a[1][type]||0))||(dexNum(a[0])-dexNum(b[0])));
+  $("workResults").innerHTML=rows.map(([id,w])=>`<span class="wr" data-id="${id}"><img src="${(state.icons&&state.icons[id])||""}">${nameOf(id)} <span class="lv">${w[type]}</span></span>`).join("")||'<span class="hint">没有符合条件的帕鲁</span>';
+  $("workResults").querySelectorAll(".wr").forEach(el=>el.onclick=()=>{ setTarget(el.dataset.id); switchMode("rev"); openTarget(); });
 };
 
 // ---------------- events ----------------
