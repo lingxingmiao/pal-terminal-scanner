@@ -66,6 +66,14 @@ async function init() {
     if(params.get("mode")==="nav"){
       switchMode("nav");
       if(params.get("group")){ navGroups=[{name:params.get("group"),ids:[]}]; navGroupIdx=0; renderGroupCards(); }
+      if(params.get("grp")){
+        for(const part of params.get("grp").split(";")){
+          const [nm,ids]=part.split(":");
+          if(nm) navGroups.push({name:nm,ids:(ids||"").split("|").map(t=>resolveId(t)).filter(Boolean)});
+        }
+        navGroupIdx=0; renderGroupCards();
+        if(params.get("reqgrp")) $("navAllGroups").checked=true;
+      }
       if(params.get("navTargets")){ for(const t of params.get("navTargets").split(",")){ const id=resolveId(t); if(id) navTargets.push(id); } renderNavTargets(); setTimeout(()=>$("navGo").click(),300); }
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
       if(params.get("navTarget")) $("navGo").click();
@@ -506,14 +514,20 @@ function reverseDist(target){
   while(q.length){const u=q.shift();for(const p of (rev[u]||[])){if(dist[p]===undefined){dist[p]=dist[u]+1;q.push(p);}}}
   return dist;
 }
-function navSearch(inputs,target,passiveId,planned){
+function navSearch(inputs,target,passiveId,planned,groups){
   const edges=navEdges(), dist=reverseDist(target), inputSet=new Set(inputs);
+  const groupOf=new Map();
+  if(groups) groups.forEach((g,i)=>{ for(const id of g) if(!groupOf.has(id)) groupOf.set(id,i); });
+  const fullMask=groups&&groups.length?(1<<groups.length)-1:0;
   const pq=new Heap(); const best=new Map();
   let bestResult=null,bestKey=null,exp=0;
-  for(const p of inputs) pq.push({pal:p,carry:!!passiveId,cost:0,prob:1,ext:0,dex:0,steps:0,path:[]},[0,0,0,0]);
+  for(const p of inputs){
+    const m0=groupOf.has(p)?1<<groupOf.get(p):0;
+    pq.push({pal:p,carry:!!passiveId,mask:m0,cost:0,prob:1,ext:0,dex:0,steps:0,path:[]},[0,0,0,0]);
+  }
   while(pq.size&&exp<200000){
     const s=pq.pop(); exp++;
-    if(s.pal===target&&(!passiveId||s.carry)){
+    if(s.pal===target&&(!passiveId||s.carry)&&(!fullMask||s.mask===fullMask)){
       const key=[s.cost,s.ext,s.dex,s.steps];
       if(!bestKey||key<bestKey){bestKey=key;bestResult=s;}
       continue;
@@ -541,11 +555,14 @@ function navSearch(inputs,target,passiveId,planned){
       }
       let stepCost=passiveId?(p>0?1/p:0):1;
       if(planned&&planned.has(child)) stepCost=0;
-      const ns={pal:child,carry:s.carry||otherCarry,cost:s.cost+stepCost,
+      let mask=s.mask||0;
+      if(groupOf.has(other)) mask|=1<<groupOf.get(other);
+      if(groupOf.has(child)) mask|=1<<groupOf.get(child);
+      const ns={pal:child,carry:s.carry||otherCarry,mask,cost:s.cost+stepCost,
         prob:s.prob*(passiveId?p:1),ext:s.ext+(otherIn?0:1),
         dex:s.dex+(otherIn?0:dexNum(other)),steps:s.steps+1,
         path:s.path.concat([{from:s.pal,other,child,external:!otherIn,p:passiveId?p:1,stepCost}])};
-      const key=child+"|"+(ns.carry?1:0);
+      const key=child+"|"+(ns.carry?1:0)+"|"+mask;
       const prev=best.get(key);
       if(prev&&(prev[0]<ns.cost||(prev[0]===ns.cost&&prev[1]<ns.ext)||(prev[0]===ns.cost&&prev[1]===ns.ext&&prev[2]<=ns.dex))) continue;
       best.set(key,[ns.cost,ns.ext,ns.dex]);
@@ -1119,6 +1136,7 @@ drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("
 $("navGo").onclick = () => {
   const inputs = navPick.size ? [...navPick] : [...state.owned];
   let passiveId=null, passiveName="";
+  const reqGroups=$("navAllGroups").checked ? navGroups.filter(g=>g.ids&&g.ids.length).map(g=>new Set(g.ids)) : null;
   if(navGroupIdx>=0 && navGroups[navGroupIdx]){
     const gname=navGroups[navGroupIdx].name;
     for(const k in NAV_PASSIVES) if(gname.includes(k)){ passiveId=NAV_PASSIVES[k]; passiveName=k; }
@@ -1133,16 +1151,17 @@ $("navGo").onclick = () => {
   if(!targets.length){$("status").textContent="导航：目标没识别出来";return;}
   if(targets.length>1){
     $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${targets.length} 个目标`;
-    const m=navSearchMulti(inputs,targets,passiveId);
+    const m=navSearchMulti(inputs,targets,passiveId,reqGroups);
     m._inputs=inputs; m.passiveName=passiveName;
     navView.lastResult=m.items[0]?m.items[0].result:null;
     renderNavMulti(m,inputs);
     return;
   }
   const target=targets[0];
-  if(inputs.includes(target)){ $("status").textContent="导航：目标已在输入里，无需配种"; renderNav(null,inputs,target); return; }
-  $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}`;
-  const r=navSearch(inputs,target,passiveId);
+  const searchInputs=inputs.filter(x=>x!==target);
+  $("status").textContent=`导航：${searchInputs.length} 只已有帕鲁 → ${nameOf(target)}`;
+  const r=navSearch(searchInputs.length?searchInputs:inputs,target,passiveId,undefined,reqGroups);
+  if(!r&&reqGroups){ $("status").textContent="导航：找不到能覆盖所有分组的路线"; return; }
   if(passiveId) $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}（遗传 ${passiveName}）`;
   if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
   renderNav(r,inputs,target);
@@ -1166,14 +1185,15 @@ function addNavTarget(id){
 }
 $("navAdd").onclick=()=>{ addNavTarget(resolveId($("navTarget").value)); };
 $("navTarget").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNavTarget(resolveId($("navTarget").value)); } });
-function navSearchMulti(inputs,targets,passiveId){
+function navSearchMulti(inputs,targets,passiveId,groups){
   const inputSet=new Set(inputs);
   const planned=new Set(inputs);
   const items=[];
   for(const t of targets){
-    if(inputSet.has(t)){ items.push({target:t,done:true}); continue; }
-    const r=navSearch(inputs,t,passiveId,planned);
-    if(r){ items.push({target:t,result:r}); for(const st of r.path) planned.add(st.child); }
+    const base=inputs.filter(x=>x!==t);
+    const r=navSearch(base.length?base:inputs,t,passiveId,planned,groups);
+    if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t)}); for(const st of r.path) planned.add(st.child); }
+    else items.push({target:t,done:true});
   }
   const seen=new Set(), steps=[];
   for(const {result} of items) for(const s of result.path){
@@ -1207,11 +1227,11 @@ function renderNavMulti(m,inputs){
   const seen=new Set();
   const rows=[];
   for(const {target,result,done} of m.items){
-    if(done){ rows.push(`<tr><td>—</td><td>${nameOf(target)}</td><td colspan="3">已在输入里，无需配种（点节点可看方案）</td></tr>`); continue; }
+    if(!result){ rows.push(`<tr><td>—</td><td>${nameOf(target)}</td><td colspan="3">已在输入里，无需配种（点节点可看方案）</td></tr>`); continue; }
     result.path.forEach((p,i)=>{
       const k=`${p.from}|${p.other}|${p.child}`;
       const shared=seen.has(k); seen.add(k);
-      rows.push(`<tr><td>${i+1}</td><td>${nameOf(target)}</td><td>${nameOf(p.from)} + ${nameOf(p.other)}</td><td>${nameOf(p.child)}</td><td>${shared?'<span class="tag in">共用</span>':'—'}</td></tr>`);
+      rows.push(`<tr><td>${i+1}</td><td>${nameOf(target)}${done?' <span class="tag in">已拥有</span>':''}</td><td>${nameOf(p.from)} + ${nameOf(p.other)}</td><td>${nameOf(p.child)}</td><td>${shared?'<span class="tag in">共用</span>':'—'}</td></tr>`);
     });
   }
   $("navTable").innerHTML=`<table><thead><tr><th>#</th><th>目标</th><th>父母</th><th>子代</th><th>共用</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
