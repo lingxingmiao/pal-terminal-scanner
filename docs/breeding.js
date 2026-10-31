@@ -7,7 +7,7 @@ const state = {
   labels: null, zh: null, icons: null,
   breed: null, pairIndex: null,
   owned: new Set(), ownedConf: new Map(), manualAdd: new Set(), manualRemove: new Set(),
-  target: null, mode: "rev", backendMode: "gpu", meta: null, works: null,
+  target: null, mode: "rev", backendMode: "gpu", meta: null, works: null, passives: null,
   expanded: new Map(),
   grid: { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 },
 };
@@ -27,14 +27,15 @@ async function init() {
     }
     updateBackendBtn();
     $("status").textContent = `模型就绪（${state.backend}），等待截图…`;
-    const [labels, zh, breed, meta, works] = await Promise.all([
+    const [labels, zh, breed, meta, works, passives] = await Promise.all([
       fetch("models/labels.json").then(r => r.json()),
       fetch("models/zh_names.json").then(r => r.json()),
       fetch("breeding.json").then(r => r.json()),
       fetch("meta.json").then(r => r.json()),
       fetch("works.json").then(r => r.json()),
+      fetch("pal_passives.json").then(r => r.json()).catch(() => null),
     ]);
-    state.labels = labels.labels; state.zh = zh; state.breed = breed; state.meta = meta; state.works = works;
+    state.labels = labels.labels; state.zh = zh; state.breed = breed; state.meta = meta; state.works = works; state.passives = passives || null;
     state.pairIndex = new Map();
     for (const [child, pairs] of Object.entries(breed)) for (const [a, b] of pairs) {
       const k = a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -64,6 +65,7 @@ async function init() {
     if(params.get("detect")) setTimeout(()=>$("detectBtn").click(),700);
     if(params.get("mode")==="nav"){
       switchMode("nav");
+      if(params.get("group")){ navGroups=[{name:params.get("group"),ids:[]}]; navGroupIdx=0; renderGroupCards(); }
       if(params.get("navTargets")){ for(const t of params.get("navTargets").split(",")){ const id=resolveId(t); if(id) navTargets.push(id); } renderNavTargets(); setTimeout(()=>$("navGo").click(),300); }
       if(params.get("navTarget")) $("navTarget").value=params.get("navTarget");
       if(params.get("navTarget")) $("navGo").click();
@@ -504,7 +506,7 @@ function reverseDist(target){
   while(q.length){const u=q.shift();for(const p of (rev[u]||[])){if(dist[p]===undefined){dist[p]=dist[u]+1;q.push(p);}}}
   return dist;
 }
-function navSearch(inputs,target,passiveId){
+function navSearch(inputs,target,passiveId,planned){
   const edges=navEdges(), dist=reverseDist(target), inputSet=new Set(inputs);
   const pq=new Heap(); const best=new Map();
   let bestResult=null,bestKey=null,exp=0;
@@ -537,7 +539,8 @@ function navSearch(inputs,target,passiveId){
         if(s.carry&&otherCarry) p=0.75;
         else if(s.carry||otherCarry) p=0.5;
       }
-      const stepCost=passiveId?(p>0?1/p:0):1;
+      let stepCost=passiveId?(p>0?1/p:0):1;
+      if(planned&&planned.has(child)) stepCost=0;
       const ns={pal:child,carry:s.carry||otherCarry,cost:s.cost+stepCost,
         prob:s.prob*(passiveId?p:1),ext:s.ext+(otherIn?0:1),
         dex:s.dex+(otherIn?0:dexNum(other)),steps:s.steps+1,
@@ -565,7 +568,10 @@ class Heap{
 
 function renderNav(result,inputs,target){
   if(!result){$("navSummary").textContent="没有找到可行路线（深度不够或图不连通）。";$("navTable").innerHTML="";return;}
-  $("navSummary").textContent=`总步数 ${result.steps} · 期望蛋糕 ${result.cost.toFixed(2)}（每步 1 个） · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
+  const pct=(result.prob*100).toFixed(1);
+  $("navSummary").textContent = result.prob<1
+    ? `总步数 ${result.steps} · 成功率 ${pct}% · 期望蛋糕 ${result.cost.toFixed(2)} · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`
+    : `总步数 ${result.steps} · 期望蛋糕 ${result.cost.toFixed(2)}（每步 1 个） · 外部帕鲁 ${result.ext} 只 · 外部 No 总和 ${result.dex}`;
   const rows=result.path.map((p,i)=>{
     const ext=p.external?`<span class="tag ext">外部 No.${dexNum(p.other)}</span>`:`<span class="tag in">输入</span>`;
     return `<tr><td>${i+1}</td><td>${nameOf(p.from)}<br><span class="mono">${p.from}</span></td>
@@ -1112,6 +1118,14 @@ drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
 $("navGo").onclick = () => {
   const inputs = navPick.size ? [...navPick] : [...state.owned];
+  let passiveId=null, passiveName="";
+  if(navGroupIdx>=0 && navGroups[navGroupIdx]){
+    const gname=navGroups[navGroupIdx].name;
+    for(const k in NAV_PASSIVES) if(gname.includes(k)){ passiveId=NAV_PASSIVES[k]; passiveName=k; }
+    if(!passiveId&&state.passives){
+      for(const [pid,v] of Object.entries(state.passives)) if(gname.includes(v.name)){ passiveId=pid; passiveName=v.name; }
+    }
+  }
   const typed=resolveId($("navTarget").value);
   const targets=[...navTargets];
   if(typed&&!targets.includes(typed)) targets.push(typed);
@@ -1119,15 +1133,17 @@ $("navGo").onclick = () => {
   if(!targets.length){$("status").textContent="导航：目标没识别出来";return;}
   if(targets.length>1){
     $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${targets.length} 个目标`;
-    const m=navSearchMulti(inputs,targets);
-    m._inputs=inputs;
+    const m=navSearchMulti(inputs,targets,passiveId);
+    m._inputs=inputs; m.passiveName=passiveName;
     navView.lastResult=m.items[0]?m.items[0].result:null;
     renderNavMulti(m,inputs);
     return;
   }
   const target=targets[0];
+  if(inputs.includes(target)){ $("status").textContent="导航：目标已在输入里，无需配种"; renderNav(null,inputs,target); return; }
   $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}`;
-  const r=navSearch(inputs,target,null);
+  const r=navSearch(inputs,target,passiveId);
+  if(passiveId) $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}（遗传 ${passiveName}）`;
   if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
   renderNav(r,inputs,target);
 };
@@ -1150,15 +1166,22 @@ function addNavTarget(id){
 }
 $("navAdd").onclick=()=>{ addNavTarget(resolveId($("navTarget").value)); };
 $("navTarget").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNavTarget(resolveId($("navTarget").value)); } });
-function navSearchMulti(inputs,targets){
+function navSearchMulti(inputs,targets,passiveId){
+  const inputSet=new Set(inputs);
+  const planned=new Set(inputs);
   const items=[];
-  for(const t of targets){ const r=navSearch(inputs,t,null); if(r) items.push({target:t,result:r}); }
+  for(const t of targets){
+    if(inputSet.has(t)){ items.push({target:t,done:true}); continue; }
+    const r=navSearch(inputs,t,passiveId,planned);
+    if(r){ items.push({target:t,result:r}); for(const st of r.path) planned.add(st.child); }
+  }
   const seen=new Set(), steps=[];
   for(const {result} of items) for(const s of result.path){
     const k=`${s.from}|${s.other}|${s.child}`;
     if(!seen.has(k)){ seen.add(k); steps.push(s); }
   }
-  return {multi:true, items, steps, cost:steps.length};
+  const cost=steps.reduce((a,s)=>a+(s.stepCost||1),0);
+  return {multi:true, items, steps, cost};
 }
 function buildNavGraphMulti(m,inputs){
   const inputSet=new Set(inputs), nodes=new Map(), edges=[];
@@ -1178,10 +1201,13 @@ function buildNavGraphMulti(m,inputs){
 }
 function renderNavMulti(m,inputs){
   if(!m.items.length){ $("navSummary").textContent="没有找到可行路线"; $("navTable").innerHTML=""; return; }
-  $("navSummary").textContent=`目标 ${m.items.length} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）`;
+  const done=m.items.filter(x=>x.done).length;
+  const todo=m.items.filter(x=>x.result).length;
+  $("navSummary").textContent=`目标 ${m.items.length} 个 · 已拥有 ${done} 个 · 需配种 ${todo} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）`;
   const seen=new Set();
   const rows=[];
-  for(const {target,result} of m.items){
+  for(const {target,result,done} of m.items){
+    if(done){ rows.push(`<tr><td>—</td><td>${nameOf(target)}</td><td colspan="3">已在输入里，无需配种（点节点可看方案）</td></tr>`); continue; }
     result.path.forEach((p,i)=>{
       const k=`${p.from}|${p.other}|${p.child}`;
       const shared=seen.has(k); seen.add(k);
