@@ -1162,7 +1162,8 @@ drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("
 $("navGo").onclick = async () => {
   const inputs = navPick.size ? [...navPick] : [...state.owned];
   let passiveId=null, passiveName="";
-  const reqGroups=$("navAllGroups").checked ? navGroups.filter(g=>g.ids&&g.ids.length).map(g=>new Set(g.ids)) : null;
+  const allGroups=navGroups.filter(g=>g.ids&&g.ids.length).map(g=>new Set(g.ids));
+  const reqGroups=$("navAllGroups").checked ? allGroups : null;
   if(navGroupIdx>=0 && navGroups[navGroupIdx]){
     const gname=navGroups[navGroupIdx].name;
     for(const k in NAV_PASSIVES) if(gname.includes(k)){ passiveId=NAV_PASSIVES[k]; passiveName=k; }
@@ -1180,7 +1181,7 @@ $("navGo").onclick = async () => {
   const t0=performance.now();
   if(targets.length>1){
     $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${targets.length} 个目标`;
-    const m=navSearchMulti(inputs,targets,passiveId,reqGroups);
+    const m=navSearchMulti(inputs,targets,passiveId,reqGroups,allGroups);
     m._inputs=inputs; m.passiveName=passiveName;
     navView.lastResult=m.items[0]?m.items[0].result:null;
     renderNavMulti(m,inputs);
@@ -1216,13 +1217,14 @@ function addNavTarget(id){
 }
 $("navAdd").onclick=()=>{ addNavTarget(resolveId($("navTarget").value)); };
 $("navTarget").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNavTarget(resolveId($("navTarget").value)); } });
-function navSearchMulti(inputs,targets,passiveId,groups){
+function navSearchMulti(inputs,targets,passiveId,groups,allGroups){
   const inputSet=new Set(inputs);
   const planned=new Set(inputs);
   const items=[];
   for(const t of targets){
     const base=inputs.filter(x=>x!==t);
-    const r=navSearch(base.length?base:inputs,t,passiveId,planned,groups);
+    let r=navSearch(base.length?base:inputs,t,passiveId,planned,groups);
+    if(!r&&groups) r=navSearch(base.length?base:inputs,t,passiveId,planned,null);
     if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t)}); for(const st of r.path) planned.add(st.child); }
     else items.push({target:t,done:true});
   }
@@ -1232,15 +1234,27 @@ function navSearchMulti(inputs,targets,passiveId,groups){
     if(!seen.has(k)){ const st={...s,usedBy:new Set([target])}; seen.set(k,st); steps.push(st); }
     else seen.get(k).usedBy.add(target);
   }}
+  const disp=allGroups||[];
+  for(const {result} of items){ if(!result) continue;
+    let acc=0;
+    const first=result.path[0];
+    if(first) for(let gi=0;gi<disp.length;gi++){ if(disp[gi].has(first.from)) acc|=1<<gi; }
+    for(const s of result.path){
+      for(let gi=0;gi<disp.length;gi++){ if(disp[gi].has(s.other)) acc|=1<<gi; }
+      const k=`${s.from}|${s.other}|${s.child}`;
+      const st=seen.get(k);
+      if(st) st.accMask=(st.accMask||0)|acc;
+    }
+  }
   const cost=steps.reduce((a,s)=>a+(s.stepCost||1),0);
-  return {multi:true, items, steps, cost};
+  return {multi:true, items, steps, cost, disp};
 }
 function buildNavGraphMulti(m,inputs){
   const inputSet=new Set(inputs), nodes=new Map(), edges=[];
   const add=(id,type)=>{ if(!nodes.has(id)) nodes.set(id,{id,type,x:0,y:0}); const n=nodes.get(id); if(type==="target") n.type="target"; else if(n.type!=="target") n.type=type; return n; };
   for(const {target,result} of m.items){
-    add(target,"target");
     if(!result) continue;
+    add(target,"target");
     for(const p of result.path){
       const f=add(p.from,inputSet.has(p.from)?"owned":"external");
       const o=add(p.other,p.external?"external":"owned");
@@ -1258,14 +1272,14 @@ function renderNavMulti(m,inputs){
   const done=m.items.filter(x=>x.done).length;
   const todo=m.items.filter(x=>x.result).length;
   $("navSummary").textContent=`目标 ${m.items.length} 个 · 已拥有 ${done} 个 · 需配种 ${todo} 个 · 共用后总配种 ${m.cost} 次（蛋糕 ${m.cost} 个）`;
-  const groupsOfPal=(id)=>navGroups.filter(g=>g.ids&&g.ids.includes(id)).map(g=>g.name);
+  const disp=m.disp||[];
   const rows=m.steps.map((st,i)=>{
     const users=[...st.usedBy].map(nameOf).join("、");
-    const gs=[...new Set([...groupsOfPal(st.from),...groupsOfPal(st.other),...groupsOfPal(st.child)])];
-    return `<tr><td>${i+1}</td><td>${nameOf(st.from)} + ${nameOf(st.other)}</td><td>${nameOf(st.child)}</td><td>${users}</td><td>${gs.length?gs.join("、"):"—"}</td></tr>`;
+    const names=disp.filter((_,gi)=>((st.accMask||0)&(1<<gi))).map(g=>g.name);
+    return `<tr><td>${i+1}</td><td>${nameOf(st.from)} + ${nameOf(st.other)}</td><td>${nameOf(st.child)}</td><td>${users}</td><td>${names.length?names.join("、"):"—"}</td></tr>`;
   }).join("");
   const doneTargets=m.items.filter(x=>!x.result).map(x=>nameOf(x.target));
-  $("navTable").innerHTML=`<table><thead><tr><th>步骤</th><th>父母</th><th>子代</th><th>服务于目标</th><th>遗传分组</th></tr></thead><tbody>${rows}</tbody></table>${doneTargets.length?`<p class="hint">已拥有无需配种：${doneTargets.join("、")}</p>`:""}`;
+  $("navTable").innerHTML=`<table><thead><tr><th>步骤</th><th>父母</th><th>子代</th><th>服务于目标</th><th>子代累计词条</th></tr></thead><tbody>${rows}</tbody></table>${doneTargets.length?`<p class="hint">已拥有无需配种：${doneTargets.join("、")}</p>`:""}`;
   syncCanvasSize();
   buildNavGraphMulti(m,inputs);
   paintNavGraph();
