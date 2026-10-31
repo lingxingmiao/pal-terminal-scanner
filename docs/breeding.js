@@ -1037,7 +1037,7 @@ $("detectBtn").onclick=async()=>{
   try{
     const det=await detectAll(state.lastImg);
     drawDetections(det);
-    $("status").textContent=`自动检测完成：${det.kept.length} 个`;
+    $("status").textContent=`自动检测完成：${det.kept.length} 个（尺度 64–256）`;
   }catch(e){ $("status").textContent="自动检测失败："+e.message; }
 };
 
