@@ -1198,6 +1198,10 @@ $("navGo").onclick = async () => {
   let passiveId=null, passiveName="";
   const allGroups=navGroups.filter(g=>g.ids&&g.ids.length).map(g=>new Set(g.ids));
   const brute=$("navBrute").checked;
+  if(!reqGroups && allGroups.length){
+    const isPassiveGroup=navGroups.some(g=>g.ids&&g.ids.length&&Object.values(state.passives||{}).some(v=>v.name===g.name));
+    if(isPassiveGroup) $("status").textContent="提示：要按词条遗传算概率，请勾选「每组至少用一只」";
+  }
   const reqGroups=$("navAllGroups").checked ? allGroups : null;
   if(navGroupIdx>=0 && navGroups[navGroupIdx]){
     const gname=navGroups[navGroupIdx].name;
