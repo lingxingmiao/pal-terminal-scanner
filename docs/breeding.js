@@ -549,6 +549,7 @@ function navSearch(inputs,target,passiveId,planned,groups){
     const seenChild=new Set(); let expanded=0;
     for(const [child,other] of cands){
       if(expanded>=12) break;
+      if(!inputSet.has(other) && state.breedable && !state.breedable.has(other)) continue;
       if(seenChild.has(child)) continue;
       seenChild.add(child); expanded++;
       const otherIn=inputSet.has(other);
@@ -1234,7 +1235,7 @@ function navSearchBrute(inputs,target,groups){
   const groupOf=new Map();
   (groups||[]).forEach((g,i)=>{ for(const id of g) if(!groupOf.has(id)) groupOf.set(id,i); });
   const full=(groups&&groups.length)?(1<<groups.length)-1:0;
-  const q=[]; const seen=new Set();
+  const q=[]; const seen=new Set(); const inputSet=new Set(inputs);
   for(const p of inputs){
     if(p===target) continue;
     const m0=groupOf.has(p)?1<<groupOf.get(p):0;
@@ -1248,6 +1249,7 @@ function navSearchBrute(inputs,target,groups){
     if(s.path.length>=12) continue;
     for(const [child,other] of (edges[s.pal]||[])){
       if(child===s.pal) continue;
+      if(!inputSet.has(other) && state.breedable && !state.breedable.has(other)) continue;
       const m=s.mask | (groupOf.has(other)?1<<groupOf.get(other):0);
       const k=child+"|"+m; if(seen.has(k)) continue; seen.add(k);
       q.push({pal:child,mask:m,path:s.path.concat([{from:s.pal,other,child}])});
