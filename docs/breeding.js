@@ -521,11 +521,11 @@ function reverseDist(target){
   distCache.set(target,dist);
   return dist;
 }
-function navSearch(inputs,target,passiveId,planned,groups){
+function navSearch(inputs,target,passiveId,planned,groups,requiredMask){
   const edges=navEdges(), dist=reverseDist(target), inputSet=new Set(inputs);
   const groupOf=new Map();
   if(groups) groups.forEach((g,i)=>{ for(const id of g) if(!groupOf.has(id)) groupOf.set(id,i); });
-  const fullMask=groups&&groups.length?(1<<groups.length)-1:0;
+  const reqMask=requiredMask||0;
   if(inputs.every(p=>dist[p]===undefined)) return null;
   const pq=new Heap(); const best=new Map();
   let bestResult=null,bestKey=null,exp=0;
@@ -535,7 +535,7 @@ function navSearch(inputs,target,passiveId,planned,groups){
   }
   while(pq.size&&exp<50000){
     const s=pq.pop(); exp++;
-    if(s.pal===target&&(!passiveId||s.carry)&&(!fullMask||s.mask===fullMask)){
+    if(s.pal===target&&(!passiveId||s.carry)&&(!reqMask||(s.mask&reqMask)===reqMask)){
       const key=[s.cost,s.ext,s.dex,s.steps];
       if(!bestKey||key<bestKey){bestKey=key;bestResult=s;}
       continue;
@@ -1174,7 +1174,7 @@ document.querySelectorAll(".mode-tabs button").forEach(b=>{
 });
 $("guideBtn").onclick=()=>{ $("guideModal").hidden=false; };
 $("guideOk").onclick=()=>{ $("guideModal").hidden=true; try{localStorage.setItem("pal_guide_seen","1");}catch(e){} };
-if(!localStorage.getItem("pal_guide_seen")) setTimeout(()=>{ $("guideModal").hidden=false; }, 800);
+if(!localStorage.getItem("pal_guide_seen") && !new URLSearchParams(location.search).get("noguide")) setTimeout(()=>{ $("guideModal").hidden=false; }, 800);
 
 // ---------------- events ----------------
 async function addFiles(files) {
@@ -1196,7 +1196,12 @@ drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("
 $("navGo").onclick = async () => {
   const inputs = navPick.size ? [...navPick] : [...state.owned];
   let passiveId=null, passiveName="";
-  const allGroups=navGroups.filter(g=>g.ids&&g.ids.length).map(g=>new Set(g.ids));
+  const gl=navGroups.filter(g=>g.ids&&g.ids.length);
+  const allGroups=gl.map(g=>new Set(g.ids));
+  const passiveNames=new Set(Object.values(state.passives||{}).map(v=>v.name));
+  let reqMask=0;
+  gl.forEach((g,i)=>{ if(passiveNames.has(g.name)) reqMask|=1<<i; });
+  if($("navAllGroups").checked) reqMask=(1<<gl.length)-1;
   const brute=$("navBrute").checked;
   if(!reqGroups && allGroups.length){
     const isPassiveGroup=navGroups.some(g=>g.ids&&g.ids.length&&Object.values(state.passives||{}).some(v=>v.name===g.name));
@@ -1220,7 +1225,7 @@ $("navGo").onclick = async () => {
   const t0=performance.now();
   if(targets.length>1){
     $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${targets.length} 个目标`;
-    const m=navSearchMulti(inputs,targets,passiveId,reqGroups,allGroups,brute);
+    const m=navSearchMulti(inputs,targets,passiveId,allGroups,allGroups,brute,reqMask);
     m._inputs=inputs; m.passiveName=passiveName;
     navView.lastResult=m.items[0]?m.items[0].result:null;
     renderNavMulti(m,inputs);
@@ -1230,8 +1235,8 @@ $("navGo").onclick = async () => {
   const target=targets[0];
   const searchInputs=inputs.filter(x=>x!==target);
   $("status").textContent=`导航：${searchInputs.length} 只已有帕鲁 → ${nameOf(target)}`;
-  const r=brute?navSearchBrute(searchInputs.length?searchInputs:inputs,target,reqGroups||allGroups):navSearch(searchInputs.length?searchInputs:inputs,target,passiveId,undefined,reqGroups);
-  if(!r&&reqGroups){ $("status").textContent=brute?"导航：暴力搜索也找不到覆盖所有分组的路线":"导航：找不到能覆盖所有分组的路线"; return; }
+  const r=brute?navSearchBrute(searchInputs.length?searchInputs:inputs,target,allGroups,reqMask):navSearch(searchInputs.length?searchInputs:inputs,target,passiveId,undefined,allGroups,reqMask);
+  if(!r&&reqMask){ $("status").textContent=brute?"导航：暴力搜索也找不到覆盖所需词条的路线":"导航：找不到能覆盖所需词条的路线"; return; }
   if(passiveId) $("status").textContent=`导航：${inputs.length} 只已有帕鲁 → ${nameOf(target)}（遗传 ${passiveName}）`;
   if(r){r._inputs=inputs;r._target=target;navView.lastResult=r;}
   renderNav(r,inputs,target);
@@ -1256,11 +1261,11 @@ function addNavTarget(id){
 }
 $("navAdd").onclick=()=>{ addNavTarget(resolveId($("navTarget").value)); };
 $("navTarget").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addNavTarget(resolveId($("navTarget").value)); } });
-function navSearchBrute(inputs,target,groups){
+function navSearchBrute(inputs,target,groups,requiredMask){
   const edges=navEdges();
   const groupOf=new Map();
   (groups||[]).forEach((g,i)=>{ for(const id of g) if(!groupOf.has(id)) groupOf.set(id,i); });
-  const full=(groups&&groups.length)?(1<<groups.length)-1:0;
+  const req=(requiredMask||0);
   const q=[]; const seen=new Set(); const inputSet=new Set(inputs);
   for(const p of inputs){
     if(p===target) continue;
@@ -1271,7 +1276,7 @@ function navSearchBrute(inputs,target,groups){
   let head=0;
   while(head<q.length){
     const s=q[head++];
-    if(s.pal===target && s.mask===(full||s.mask)){ return finalizePath(s.path,inputs,groups); }
+    if(s.pal===target && (!req || (s.mask&req)===req)){ return finalizePath(s.path,inputs,groups); }
     if(s.path.length>=12) continue;
     for(const [child,other] of (edges[s.pal]||[])){
       if(child===s.pal) continue;
@@ -1300,13 +1305,13 @@ function finalizePath(path,inputs,groups){
   }
   return {path,steps:path.length,cost,prob,ext,dex};
 }
-function navSearchMulti(inputs,targets,passiveId,groups,allGroups,brute){
+function navSearchMulti(inputs,targets,passiveId,groups,allGroups,brute,reqMask){
   const inputSet=new Set(inputs);
   const planned=new Set(inputs);
   const items=[];
   for(const t of targets){
     const base=inputs.filter(x=>x!==t);
-    const r=brute?navSearchBrute(base.length?base:inputs,t,groups||allGroups):navSearch(base.length?base:inputs,t,passiveId,planned,groups);
+    const r=brute?navSearchBrute(base.length?base:inputs,t,groups||allGroups,reqMask):navSearch(base.length?base:inputs,t,passiveId,planned,groups,reqMask);
     if(r&&r.path.length){ items.push({target:t,result:r,done:inputSet.has(t)}); for(const st of r.path) planned.add(st.child); }
     else items.push({target:t,done:inputSet.has(t),blocked:!!groups});
   }
