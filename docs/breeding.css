@@ -190,3 +190,8 @@
 .pick-search{width:100%;margin-top:8px;background:#0f1216;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:12px}
 
 .nav-table td:nth-child(6){min-width:150px}
+
+.guide-list{margin:8px 0 0;padding-left:18px;font-size:12px;line-height:1.7;color:#dfe8f0}
+.guide-list li{margin-bottom:4px}
+#analysisTable tr[data-id]{cursor:pointer}
+#analysisTable tr[data-id]:hover{background:#1d2630}

@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <title>给你配了 - 幻兽帕鲁自动配种工具</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="breeding.css?v=20261031b3">
+<link rel="stylesheet" href="breeding.css?v=20261031b4">
 </head>
 <body>
 <header>
+  <button id="guideBtn" class="mini" style="float:right;margin-left:8px">使用引导</button>
   <h1>给你配了 <span class="muted">· 幻兽帕鲁自动配种工具</span></h1>
   <p class="sub">
     上传/粘贴终端截图识别你已有的帕鲁，方案里优先显示你有的；点任意帕鲁卡片继续展开它的全部配种方式。
@@ -39,6 +40,7 @@
       <button data-mode="rev" class="on">反查：目标 → 全部方案</button>
       <button data-mode="fwd">正查：父母 → 子代</button>
       <button data-mode="nav">导航：输入 → 目标</button>
+      <button data-mode="analysis">分析：配种中心</button>
     </div>
 
     <div id="revPanel">
@@ -59,6 +61,13 @@
       <div id="explorer" class="explorer"><p class="hint">先选择目标帕鲁。</p></div>
     </div>
 
+
+    <div id="analysisPanel" hidden>
+      <h2>分析：配种中心</h2>
+      <p class="hint">从某只帕鲁出发配到其他所有帕鲁的平均最短步数（越小越“中心”，适合当词条载体/种马）。点击一行可把它设为导航目标。</p>
+      <div id="analysisSummary" class="nav-summary"></div>
+      <div id="analysisTable" class="nav-table"></div>
+    </div>
 
     <div id="navPanel" hidden>
       <h2>导航：输入帕鲁 → 目标</h2>
@@ -126,6 +135,19 @@
 
 <script src="vendor/ort.min.js"></script>
 <div id="workPop" class="work-pop" hidden></div>
-<script src="breeding.js?v=20261031b3"></script>
+<div id="guideModal" class="modal" hidden>
+  <div class="modal-box" style="width:360px">
+    <h3>怎么用这个工具</h3>
+    <ol class="guide-list">
+      <li>把游戏终端截图拖进来 / Ctrl+V，识别你已有的帕鲁（可多张）。</li>
+      <li>在「输入分组」里勾选要参与配种的帕鲁，可保存成词条组（组名写成词条名会自动算遗传概率）。</li>
+      <li>「反查」输入目标看全部配种方案；「导航」填目标算最省蛋糕路线。</li>
+      <li>多目标就一个个添加标签；多组词条汇总勾选「暴力搜索」。</li>
+      <li>「分析」页可以看哪只帕鲁最适合当配种中心/词条载体。</li>
+    </ol>
+    <div class="modal-actions"><button id="guideOk">知道了</button></div>
+  </div>
+</div>
+<script src="breeding.js?v=20261031b4"></script>
 </body>
 </html>

@@ -7,7 +7,7 @@ const state = {
   labels: null, zh: null, icons: null,
   breed: null, pairIndex: null,
   owned: new Set(), ownedConf: new Map(), manualAdd: new Set(), manualRemove: new Set(),
-  target: null, mode: "rev", backendMode: "gpu", meta: null, works: null, passives: null,
+  target: null, mode: "rev", backendMode: "gpu", meta: null, works: null, passives: null, avgdist: null,
   expanded: new Map(),
   grid: { x0: 700, y0: 245, dx: 80, dy: 78, size: 66, cols: 6, rows: 5 },
 };
@@ -27,15 +27,16 @@ async function init() {
     }
     updateBackendBtn();
     $("status").textContent = `模型就绪（${state.backend}），等待截图…`;
-    const [labels, zh, breed, meta, works, passives] = await Promise.all([
+    const [labels, zh, breed, meta, works, passives, avgdist] = await Promise.all([
       fetch("models/labels.json").then(r => r.json()),
       fetch("models/zh_names.json").then(r => r.json()),
       fetch("breeding.json").then(r => r.json()),
       fetch("meta.json").then(r => r.json()),
       fetch("works.json").then(r => r.json()),
       fetch("pal_passives.json").then(r => r.json()).catch(() => null),
+      fetch("avgdist.json").then(r => r.json()).catch(() => null),
     ]);
-    state.labels = labels.labels; state.zh = zh; state.breed = breed; state.meta = meta; state.works = works; state.passives = passives || null;
+    state.labels = labels.labels; state.zh = zh; state.breed = breed; state.meta = meta; state.works = works; state.passives = passives || null; state.avgdist = avgdist || null;
     state.pairIndex = new Map();
     for (const [child, pairs] of Object.entries(breed)) for (const [a, b] of pairs) {
       const k = a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -63,6 +64,8 @@ async function init() {
     }
     if(params.get("wq")){ $("target").value=params.get("wq"); $("target").dispatchEvent(new Event("input")); }
     if(params.get("detect")) setTimeout(()=>$("detectBtn").click(),700);
+    if(params.get("noguide")){ try{localStorage.setItem("pal_guide_seen","1");}catch(e){} $("guideModal").hidden=true; }
+    if(params.get("mode")==="analysis"){ switchMode("analysis"); setTimeout(renderAnalysis,100); }
     if(params.get("mode")==="nav"){
       switchMode("nav");
       if(params.get("group")){ navGroups=[{name:params.get("group"),ids:[]}]; navGroupIdx=0; renderGroupCards(); }
@@ -1154,6 +1157,25 @@ $("ownAll").onclick=()=>{
   $("status").textContent=`已加入全部 ${Object.keys(state.breed).length} 只帕鲁`;
 };
 
+// ---------------- analysis ----------------
+function renderAnalysis(){
+  const d=state.avgdist; if(!d) return;
+  $("analysisSummary").textContent=`${d.nodes} 只帕鲁 · ${d.pairs} 组配种 · 配种图近似完全图；下面是“从它出发到其他帕鲁平均步数”最短的前 30 名`;
+  const rows=d.dist.slice(0,30).map((x,i)=>`<tr data-id="${x.id}"><td>${i+1}</td><td>${x.name}</td><td><span class="mono">${x.id}</span></td><td>${x.avg.toFixed(3)}</td><td>${x.reach}</td></tr>`).join("");
+  $("analysisTable").innerHTML=`<table><thead><tr><th>#</th><th>帕鲁</th><th>ID</th><th>平均步数</th><th>可达数</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("analysisTable").querySelectorAll("tr[data-id]").forEach(tr=>tr.onclick=()=>{
+    $("navTarget").value=nameOf(tr.dataset.id);
+    switchMode("nav");
+    $("status").textContent=`已选 ${nameOf(tr.dataset.id)} 作为导航目标`;
+  });
+}
+document.querySelectorAll(".mode-tabs button").forEach(b=>{
+  if(b.dataset.mode==="analysis") b.addEventListener("click",()=>setTimeout(renderAnalysis,50));
+});
+$("guideBtn").onclick=()=>{ $("guideModal").hidden=false; };
+$("guideOk").onclick=()=>{ $("guideModal").hidden=true; try{localStorage.setItem("pal_guide_seen","1");}catch(e){} };
+if(!localStorage.getItem("pal_guide_seen")) setTimeout(()=>{ $("guideModal").hidden=false; }, 800);
+
 // ---------------- events ----------------
 async function addFiles(files) {
   for (const f of files) {
@@ -1368,6 +1390,7 @@ function switchMode(mode) {
   $("revPanel").hidden = mode !== "rev";
   $("fwdPanel").hidden = mode !== "fwd";
   $("navPanel").hidden = mode !== "nav";
+  $("analysisPanel").hidden = mode !== "analysis";
 }
 document.querySelectorAll(".mode-tabs button").forEach(b => b.onclick = () => switchMode(b.dataset.mode));
 
