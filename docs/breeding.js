@@ -37,6 +37,10 @@ async function init() {
       fetch("avgdist.json").then(r => r.json()).catch(() => null),
     ]);
     state.labels = labels.labels; state.zh = zh; state.breed = breed; state.meta = meta; state.works = works; state.passives = passives || null; state.avgdist = avgdist || null;
+    state.breedable = new Set();
+    for(const [child,pairs] of Object.entries(breed)){
+      if(pairs.some(([a,b])=>!(a===child&&b===child))) state.breedable.add(child);
+    }
     state.pairIndex = new Map();
     for (const [child, pairs] of Object.entries(breed)) for (const [a, b] of pairs) {
       const k = a < b ? `${a}|${b}` : `${b}|${a}`;
