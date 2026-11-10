@@ -1203,10 +1203,6 @@ $("navGo").onclick = async () => {
   gl.forEach((g,i)=>{ if(passiveNames.has(g.name)) reqMask|=1<<i; });
   if($("navAllGroups").checked) reqMask=(1<<gl.length)-1;
   const brute=$("navBrute").checked;
-  if(!reqGroups && allGroups.length){
-    const isPassiveGroup=navGroups.some(g=>g.ids&&g.ids.length&&Object.values(state.passives||{}).some(v=>v.name===g.name));
-    if(isPassiveGroup) $("status").textContent="提示：要按词条遗传算概率，请勾选「每组至少用一只」";
-  }
   const reqGroups=$("navAllGroups").checked ? allGroups : null;
   if(navGroupIdx>=0 && navGroups[navGroupIdx]){
     const gname=navGroups[navGroupIdx].name;
